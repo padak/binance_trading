@@ -24,13 +24,65 @@ VALID_INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h',
 # Available GPT models
 AI_MODELS = {
     # OpenRouter models
-    'gpt4o': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'openai/gpt-4o-2024-11-20'},
-    'gpt4-turbo': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'openai/gpt-4-turbo'},
-    'gpt3.5': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'openai/gpt-3.5-turbo-0613'},
-    'claude3.5-haiku': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'anthropic/claude-3.5-haiku-20241022'},
-    'claude3.5-sonnet': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'anthropic/claude-3.5-sonnet'},
-    'mistral-codestral': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'mistralai/codestral-2501'},
-    'deepseek': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'deepseek/deepseek-r1'}
+    'gpt4o': {
+        'endpoint': 'https://openrouter.ai/api/v1/chat/completions',
+        'model': 'openai/gpt-4o-2024-11-20',
+        'created': 'Nov 20, 2024',
+        'context': '128,000 tokens',
+        'input_price': '$2.5/M tokens',
+        'output_price': '$10/M tokens',
+        'image_price': '$3.613/K images'
+    },
+    'gpt4-turbo': {
+        'endpoint': 'https://openrouter.ai/api/v1/chat/completions',
+        'model': 'openai/gpt-4-turbo',
+        'created': 'Apr 9, 2024',
+        'context': '128,000 tokens',
+        'input_price': '$10/M tokens',
+        'output_price': '$30/M tokens',
+        'image_price': '$14.45/K images'
+    },
+    'gpt3.5': {
+        'endpoint': 'https://openrouter.ai/api/v1/chat/completions',
+        'model': 'openai/gpt-3.5-turbo-0613',
+        'created': 'Jan 25, 2024',
+        'context': '4,095 tokens',
+        'input_price': '$1/M tokens',
+        'output_price': '$2/M tokens'
+    },
+    'claude3.5-haiku': {
+        'endpoint': 'https://openrouter.ai/api/v1/chat/completions',
+        'model': 'anthropic/claude-3.5-haiku-20241022',
+        'created': 'Nov 4, 2024',
+        'context': '200,000 tokens',
+        'input_price': '$0.8/M tokens',
+        'output_price': '$4/M tokens'
+    },
+    'claude3.5-sonnet': {
+        'endpoint': 'https://openrouter.ai/api/v1/chat/completions',
+        'model': 'anthropic/claude-3.5-sonnet',
+        'created': 'Oct 22, 2024',
+        'context': '200,000 tokens',
+        'input_price': '$3/M tokens',
+        'output_price': '$15/M tokens',
+        'image_price': '$4.8/K images'
+    },
+    'mistral-codestral': {
+        'endpoint': 'https://openrouter.ai/api/v1/chat/completions',
+        'model': 'mistralai/codestral-2501',
+        'created': 'Jan 14, 2025',
+        'context': '256,000 tokens',
+        'input_price': '$0.3/M tokens',
+        'output_price': '$0.9/M tokens'
+    },
+    'deepseek': {
+        'endpoint': 'https://openrouter.ai/api/v1/chat/completions',
+        'model': 'deepseek/deepseek-r1',
+        'created': 'Jan 20, 2025',
+        'context': '64,000 tokens',
+        'input_price': '$0.55/M tokens',
+        'output_price': '$2.19/M tokens'
+    }
 }
 
 class BinanceOrderManager:
@@ -281,8 +333,10 @@ Please format the response in plain text without any special characters or markd
             
             # Get trading recommendations if requested
             if ai_analysis:
-                print(f"Getting AI analysis using {ai_model} model {'with full data' if full_data else 'with last 20 records'}")
+                data_range = "full dataset" if full_data else "last 20 records"
+                print(f"Getting AI analysis using {ai_model} model with {data_range} ({len(df)} intervals)")
                 self.get_trading_recommendation(df, full_data=full_data, ai_model=ai_model, concise=concise)
+                return  # Skip printing price history when using AI analysis
             
             # Prepare data for display
             table_data = []
@@ -601,11 +655,11 @@ Examples:
   # Show BTC/USDC price history with custom parameters
   python binance_orders.py --token_history --pair BTCUSDC --interval 15m --limit 50
 
-  # Get AI trading recommendations (last 20 intervals)
+  # Get AI trading recommendations (last 20 intervals by default)
   python binance_orders.py --token_history --ask-ai
 
   # Get AI analysis with full dataset using GPT-4 Turbo
-  python binance_orders.py --token_history --ask-ai --full-data --ai-model gpt4-turbo
+  python binance_orders.py --token_history --ask-ai --ai-model gpt4-turbo
 
   # Get concise buy/sell orders only using different models
   python binance_orders.py --token_history --ask-ai --concise --ai-model gpt4o
@@ -620,6 +674,9 @@ Examples:
 
   # Show all data in table format
   python binance_orders.py --token_history --table
+
+  # List available AI models
+  python binance_orders.py --list-models
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -630,6 +687,8 @@ Examples:
                       help='Show order history for the last X days (default: 2)')
     group.add_argument('--token_history', action='store_true',
                       help='Show token price history')
+    group.add_argument('--list-models', action='store_true',
+                      help='List available AI models with their descriptions')
     
     # Parameters
     parser.add_argument('--pair', type=str, default="TRUMPUSDC",
@@ -640,8 +699,6 @@ Examples:
                       help='Number of historical records to fetch (default: 100)')
     parser.add_argument('--ask-ai', action='store_true',
                       help='Get trading recommendations from AI')
-    parser.add_argument('--full-data', action='store_true',
-                      help='Send full dataset to AI instead of last 20 records (only works with --ask-ai)')
     parser.add_argument('--json', action='store_true',
                       help='Export data in JSON format')
     
@@ -655,6 +712,34 @@ Examples:
     args = parser.parse_args()
 
     try:
+        if args.list_models:
+            print("\nAvailable AI Models:")
+            print("-" * 120)
+            # Prepare data for table
+            table_data = []
+            for model_id, info in AI_MODELS.items():
+                model_name = info['model'].split('/')[-1]
+                row = [
+                    model_id,
+                    model_name,
+                    info['created'],
+                    info['context'],
+                    info['input_price'],
+                    info['output_price']
+                ]
+                if 'image_price' in info:
+                    row.append(info['image_price'])
+                else:
+                    row.append('N/A')
+                table_data.append(row)
+            
+            # Print table with headers
+            headers = ['Model ID', 'Model Name', 'Created', 'Context', 'Input Price', 'Output Price', 'Image Price']
+            print(tabulate(table_data, headers=headers, tablefmt='grid', stralign='left'))
+            print("\nUse --ai-model <Model ID> to specify which model to use")
+            print("Note: Prices are in USD per million tokens for text and per thousand for images")
+            return
+
         manager = BinanceOrderManager(table_format=args.table)
         
         if args.sell_orders:
@@ -672,7 +757,7 @@ Examples:
                 interval=args.interval,
                 limit=args.limit,
                 ai_analysis=args.ask_ai,
-                full_data=args.full_data,
+                full_data=True if args.limit != 100 else False,  # Use full data if limit is specified
                 json_output=args.json,
                 ai_model=args.ai_model,
                 concise=args.concise
