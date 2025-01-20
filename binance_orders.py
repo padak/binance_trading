@@ -278,8 +278,7 @@ Please format the response in plain text without any special characters or markd
             
             # Get trading recommendations if requested
             if ai_analysis:
-                if self.verbose:
-                    print(f"Getting AI analysis using {ai_model} model {'with full data' if full_data else 'with last 20 records'}")
+                print(f"Getting AI analysis using {ai_model} model {'with full data' if full_data else 'with last 20 records'}")
                 self.get_trading_recommendation(df, full_data=full_data, ai_model=ai_model, concise=concise)
             
             # Prepare data for display
@@ -331,8 +330,7 @@ Please format the response in plain text without any special characters or markd
             ticker = self.client.get_symbol_ticker(symbol=symbol)
             return float(ticker['price'])
         except Exception as e:
-            if self.verbose:
-                print(f"Error getting price for {symbol}: {e}")
+            print(f"Error getting price for {symbol}: {e}")
             return None
 
     def print_order_details(self, order, current_price=None):
@@ -398,9 +396,8 @@ Please format the response in plain text without any special characters or markd
                 Potential Profit/Loss: {profit_loss_str}
                 """)
         except Exception as e:
-            if self.verbose:
-                print(f"Error printing order details: {e}")
-                print(f"Order data: {order}")
+            print(f"Error printing order details: {e}")
+            print(f"Order data: {order}")
 
     def format_order_for_table(self, order, current_price=None):
         try:
@@ -461,9 +458,8 @@ Please format the response in plain text without any special characters or markd
                     f"{profit_loss:.2f}%" if profit_loss is not None else "N/A"
                 ]
         except Exception as e:
-            if self.verbose:
-                print(f"Error formatting order for table: {e}")
-                print(f"Order data: {order}")
+            print(f"Error formatting order for table: {e}")
+            print(f"Order data: {order}")
             return None
 
     def print_orders_table(self, orders):
@@ -495,9 +491,6 @@ Please format the response in plain text without any special characters or markd
 
     def get_pending_orders(self, side=None):
         try:
-            if self.verbose:
-                print("Fetching pending orders...")
-            
             # Get TRUMP/USDC orders
             trump_orders = self.client.get_open_orders(symbol="TRUMPUSDC")
             
@@ -522,16 +515,10 @@ Please format the response in plain text without any special characters or markd
             # Calculate start time
             start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
             
-            if self.verbose:
-                print(f"Fetching order history since {datetime.fromtimestamp(start_time/1000)}")
-            
             all_orders = []
             
             # Try to get TRUMP/USDC trading history using my trades
             try:
-                if self.verbose:
-                    print("Fetching TRUMP/USDC trades...")
-                
                 # Try my trades first
                 trades = self.client.get_my_trades(symbol="TRUMPUSDC", limit=1000)
                 if trades:
@@ -548,25 +535,17 @@ Please format the response in plain text without any special characters or markd
                             'time': trade['time']
                         }
                         all_orders.append(order)
-                    if self.verbose:
-                        print(f"Found {len(trades)} TRUMP/USDC trades")
                 
                 # Also get current open orders
                 open_orders = self.client.get_open_orders(symbol="TRUMPUSDC")
                 if open_orders:
                     all_orders.extend(open_orders)
-                    if self.verbose:
-                        print(f"Found {len(open_orders)} open TRUMP/USDC orders")
                 
             except Exception as e:
-                if self.verbose:
-                    print(f"Error fetching TRUMP/USDC trades: {e}")
+                print(f"Error fetching TRUMP/USDC trades: {e}")
             
             # Try to get USDC fiat purchase history
             try:
-                if self.verbose:
-                    print("Fetching fiat purchase history...")
-                
                 # Try both EUR and USDT pairs for fiat
                 for fiat_pair in ['EUR', 'USDT']:
                     try:
@@ -586,20 +565,17 @@ Please format the response in plain text without any special characters or markd
                                 }
                                 all_orders.append(order)
                     except Exception as e:
-                        if self.verbose:
-                            print(f"Error fetching USDC{fiat_pair} trades: {e}")
+                        print(f"Error fetching USDC{fiat_pair} trades: {e}")
                             
             except Exception as e:
-                if self.verbose:
-                    print(f"Error fetching fiat orders: {e}")
+                print(f"Error fetching fiat orders: {e}")
             
             # Filter orders by time
             all_orders = [order for order in all_orders if int(order['time']) >= start_time]
             
             if not all_orders:
                 print("No orders found in the specified time period.")
-                if self.verbose:
-                    print("Try increasing the number of days or check if you have any trades")
+                print("Try increasing the number of days or check if you have any trades")
                 return
             
             # Sort orders by time
@@ -615,8 +591,7 @@ Please format the response in plain text without any special characters or markd
                 
         except Exception as e:
             print(f"Error in order history: {e}")
-            if self.verbose:
-                print("Full error details:", str(e))
+            print("Full error details:", str(e))
 
 def main():
     parser = argparse.ArgumentParser(
