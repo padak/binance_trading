@@ -5,7 +5,6 @@ from binance import ThreadedWebsocketManager, Client
 from dotenv import load_dotenv
 import logging
 import time
-from websocket import WebSocketConnectionClosedException
 
 """
 Binance WebSocket Monitor
@@ -65,13 +64,6 @@ def place_sell_order(symbol, quantity, buy_price):
         
     except Exception as e:
         logger.error(f"Error placing sell order: {e}")
-
-def handle_socket_error(error):
-    """Handle WebSocket errors and connection issues"""
-    logger.error(f"WebSocket error: {error}")
-    if isinstance(error, WebSocketConnectionClosedException):
-        logger.info("Connection closed, manager will automatically attempt to reconnect...")
-    return True  # Return True to attempt reconnection
 
 def process_message(msg):
     """Process incoming WebSocket message (received over WSS)"""
@@ -138,11 +130,7 @@ def main():
     try:
         # Initialize ThreadedWebsocketManager with read-only API keys
         # Uses WSS (WebSocket Secure) by default: wss://stream.binance.com:9443
-        twm = ThreadedWebsocketManager(
-            api_key=API_KEY,
-            api_secret=API_SECRET,
-            on_error=handle_socket_error  # Error callback for connection issues
-        )
+        twm = ThreadedWebsocketManager(api_key=API_KEY, api_secret=API_SECRET)
         
         logger.info("Starting WebSocket manager...")
         twm.start()
@@ -158,13 +146,17 @@ def main():
         while True:
             if twm.is_alive():
                 time.sleep(1)  # Check connection status every second
+                reconnect_count = 0  # Reset counter when connection is stable
             else:
                 logger.warning("WebSocket connection lost!")
                 if reconnect_count < max_reconnects:
                     reconnect_count += 1
                     logger.info(f"Attempting reconnection ({reconnect_count}/{max_reconnects})...")
-                    twm.start()
+                    twm.stop()  # Clean stop before reconnecting
                     time.sleep(2 ** reconnect_count)  # Exponential backoff
+                    twm = ThreadedWebsocketManager(api_key=API_KEY, api_secret=API_SECRET)
+                    twm.start()
+                    conn_key = twm.start_user_socket(callback=process_message)
                 else:
                     logger.error("Max reconnection attempts reached. Exiting...")
                     break
