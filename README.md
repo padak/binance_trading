@@ -57,6 +57,22 @@ BINANCE_API_SECRET=your_binance_api_secret
 OPENROUTER_API_KEY=your_openrouter_api_key
 ```
 
+To get your Binance API credentials:
+1. Log in to your Binance account
+2. Go to Profile > API Management
+3. Click [Create API]
+4. Set API restrictions to "Read Only" if you only need to view data
+5. Save your API Key and Secret Key securely
+
+To get your OpenRouter API key:
+1. Visit https://openrouter.ai/
+2. Sign up or log in to your account
+3. Go to the Keys section
+4. Create a new API key
+5. Copy the key and save it securely
+
+Note: Keep your API keys secure and never share them. The `.env` file is included in `.gitignore` for security.
+
 ## Usage Examples
 
 ### View Price History
