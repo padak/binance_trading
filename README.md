@@ -90,22 +90,38 @@ python binance_orders.py --token_history --table --verbose
 
 ### Get AI Trading Recommendations
 ```bash
-# Default analysis with DeepSeek R1
+# Default analysis with DeepSeek R1 (last 20 records)
 python binance_orders.py --token_history --ask-ai
 
-# Use different AI models
+# Use different AI models (use --list-models to see all available models)
 python binance_orders.py --token_history --ask-ai --ai-model gpt4o  # GPT-4
 python binance_orders.py --token_history --ask-ai --ai-model gpt4-turbo  # GPT-4 Turbo
 python binance_orders.py --token_history --ask-ai --ai-model claude3.5-haiku  # Claude-3.5 Haiku
-python binance_orders.py --token_history --ask-ai --ai-model claude3.5-sonnet  # Claude-3.5 Sonnet
-python binance_orders.py --token_history --ask-ai --ai-model mistral-codestral  # Mistral Codestral
 
 # Get concise buy/sell orders only
 python binance_orders.py --token_history --ask-ai --concise
 
-# Analysis with full dataset
-python binance_orders.py --token_history --ask-ai --full-data
+# Analysis with full dataset (specify limit)
+python binance_orders.py --token_history --ask-ai --limit 288  # Analyze full 24h data
+
+# List available AI models with details
+python binance_orders.py --list-models
 ```
+
+### AI Models Information
+The tool supports multiple AI models through OpenRouter with different capabilities:
+
+| Model | Context Size | Input Price | Output Price | Image Support |
+|-------|--------------|-------------|--------------|---------------|
+| GPT-4 | 128K tokens | $2.5/M | $10/M | Yes ($3.613/K) |
+| GPT-4 Turbo | 128K tokens | $10/M | $30/M | Yes ($14.45/K) |
+| GPT-3.5 | 4K tokens | $1/M | $2/M | No |
+| Claude-3.5 Haiku | 200K tokens | $0.8/M | $4/M | No |
+| Claude-3.5 Sonnet | 200K tokens | $3/M | $15/M | Yes ($4.8/K) |
+| Mistral Codestral | 256K tokens | $0.3/M | $0.9/M | No |
+| DeepSeek R1 | 64K tokens | $0.55/M | $2.19/M | No |
+
+Note: Prices are in USD per million tokens for text and per thousand for images.
 
 ### Manage Orders
 ```bash
