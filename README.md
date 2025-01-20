@@ -4,13 +4,33 @@ A command-line tool for managing and viewing TRUMP/USDC orders on Binance, with 
 
 ## Features
 
-- View pending buy/sell orders
-- View order history
-- View TRUMP token price history
-- Display results in table format
-- Real-time order monitoring via WebSocket
-- Automatic sell order placement
-- AI-powered trading recommendations
+- **Price History Analysis**
+  - View historical price data with customizable intervals
+  - Technical indicators (MA5, MA20, VWAP)
+  - Volume analysis and trade counts
+  - Price change percentages
+  - Export data in JSON format
+
+- **Order Management**
+  - View pending buy/sell orders for any trading pair
+  - Track order history
+  - Monitor order execution status
+  - Calculate potential profit/loss
+  - Display orders in table format
+
+- **AI Trading Recommendations**
+  - Multiple AI models support through OpenRouter:
+    - GPT-4 (gpt4o)
+    - GPT-4 Turbo
+    - GPT-3.5 Turbo
+    - Claude-3.5 Haiku
+    - Claude-3.5 Sonnet
+    - Mistral Codestral
+    - DeepSeek R1
+  - Technical analysis
+  - Buy/Sell order suggestions
+  - Price trend predictions
+  - Support/Resistance levels
 
 ## Scripts
 
