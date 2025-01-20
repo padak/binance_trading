@@ -5,6 +5,7 @@ from binance import ThreadedWebsocketManager, Client
 from dotenv import load_dotenv
 import logging
 import time
+from websocket import WebSocketConnectionClosedException
 
 """
 Binance WebSocket Monitor
@@ -12,6 +13,8 @@ Uses WSS (WebSocket Secure) by default:
 - Connects to wss://stream.binance.com:9443
 - All data is encrypted using TLS/SSL
 - Automatic handling of secure connection by ThreadedWebsocketManager
+- Automatic reconnection on connection drops (max 5 retries with exponential backoff)
+- Heartbeat monitoring to detect connection health
 """
 
 # Load environment variables
@@ -25,7 +28,10 @@ TRADE_API_KEY = os.getenv('BINANCE_TRADE_API_KEY')
 TRADE_API_SECRET = os.getenv('BINANCE_TRADE_API_SECRET')
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger()
 
 # Initialize Binance clients
@@ -60,10 +66,22 @@ def place_sell_order(symbol, quantity, buy_price):
     except Exception as e:
         logger.error(f"Error placing sell order: {e}")
 
+def handle_socket_error(error):
+    """Handle WebSocket errors and connection issues"""
+    logger.error(f"WebSocket error: {error}")
+    if isinstance(error, WebSocketConnectionClosedException):
+        logger.info("Connection closed, manager will automatically attempt to reconnect...")
+    return True  # Return True to attempt reconnection
+
 def process_message(msg):
     """Process incoming WebSocket message (received over WSS)"""
     try:
         if not isinstance(msg, dict):
+            return
+            
+        # Check for error messages
+        if msg.get('e') == 'error':
+            logger.error(f"WebSocket error message received: {msg.get('m')}")
             return
             
         event_type = msg.get('e')
@@ -114,20 +132,42 @@ Order ID: {msg.get('i')}
 
 def main():
     twm = None
+    reconnect_count = 0
+    max_reconnects = 5
+    
     try:
         # Initialize ThreadedWebsocketManager with read-only API keys
         # Uses WSS (WebSocket Secure) by default: wss://stream.binance.com:9443
-        twm = ThreadedWebsocketManager(api_key=API_KEY, api_secret=API_SECRET)
+        twm = ThreadedWebsocketManager(
+            api_key=API_KEY,
+            api_secret=API_SECRET,
+            on_error=handle_socket_error  # Error callback for connection issues
+        )
+        
+        logger.info("Starting WebSocket manager...")
         twm.start()
         
         print("Starting Binance order monitor (WSS)...")
         print("Press Ctrl+C to exit")
+        logger.info("WebSocket connection established")
         
         # Start user data socket (secure WebSocket connection)
         conn_key = twm.start_user_socket(callback=process_message)
         
-        # Keep the script running
-        twm.join()
+        # Keep the script running with connection monitoring
+        while True:
+            if twm.is_alive():
+                time.sleep(1)  # Check connection status every second
+            else:
+                logger.warning("WebSocket connection lost!")
+                if reconnect_count < max_reconnects:
+                    reconnect_count += 1
+                    logger.info(f"Attempting reconnection ({reconnect_count}/{max_reconnects})...")
+                    twm.start()
+                    time.sleep(2 ** reconnect_count)  # Exponential backoff
+                else:
+                    logger.error("Max reconnection attempts reached. Exiting...")
+                    break
             
     except KeyboardInterrupt:
         print("\nStopping monitor...")
@@ -138,7 +178,9 @@ def main():
         
     finally:
         if twm:
+            logger.info("Closing WebSocket connection...")
             twm.stop()
+            logger.info("WebSocket connection closed")
 
 if __name__ == "__main__":
     main() 
