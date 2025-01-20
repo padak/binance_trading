@@ -692,8 +692,8 @@ Examples:
                       help='Show detailed processing information')
     parser.add_argument('--table', action='store_true',
                       help='Display results in table format')
-    parser.add_argument('--ai-model', type=str, choices=list(AI_MODELS.keys()), default='claude3',
-                      help='AI model to use for analysis (default: claude3)')
+    parser.add_argument('--ai-model', type=str, choices=list(AI_MODELS.keys()), default='deepseek',
+                      help='AI model to use for analysis (default: deepseek)')
     parser.add_argument('--concise', action='store_true',
                       help='Show only buy/sell orders without detailed analysis')
 

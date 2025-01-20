@@ -89,15 +89,15 @@ python binance_orders.py --token_history --table --verbose
 
 ### Get AI Trading Recommendations
 ```bash
-# Default analysis with Claude-3.5 Sonnet
+# Default analysis with DeepSeek R1
 python binance_orders.py --token_history --ask-ai
 
 # Use different AI models
 python binance_orders.py --token_history --ask-ai --ai-model gpt4o  # GPT-4
 python binance_orders.py --token_history --ask-ai --ai-model gpt4-turbo  # GPT-4 Turbo
 python binance_orders.py --token_history --ask-ai --ai-model claude3.5-haiku  # Claude-3.5 Haiku
+python binance_orders.py --token_history --ask-ai --ai-model claude3.5-sonnet  # Claude-3.5 Sonnet
 python binance_orders.py --token_history --ask-ai --ai-model mistral-codestral  # Mistral Codestral
-python binance_orders.py --token_history --ask-ai --ai-model deepseek  # DeepSeek R1
 
 # Get concise buy/sell orders only
 python binance_orders.py --token_history --ask-ai --concise
