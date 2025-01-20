@@ -17,6 +17,12 @@
 - Portfolio tracking
 - Risk management features
 
+## Bugs
+- WebSocket reconnection not working properly after network interruption
+  - Issue: After WiFi reconnects, the script fails to re-establish WebSocket connection
+  - Error: "Failed to connect to websocket: [Errno 8] nodename nor servname provided, or not known"
+  - Priority: High
+
 ## Planned 📋
 - Email/Telegram notifications
 - Custom trading strategies
