@@ -15,21 +15,24 @@ A command-line tool for managing and viewing TRUMP/USDC orders on Binance, with 
 ## Scripts
 
 ### Main Order Management Script (`binance_orders.py`)
-- View pending orders
-- Check order history
-- Get price history
+- View pending orders, order history, and price history
 - Get AI recommendations for trading
+- Uses read-only API key (BINANCE_API_KEY)
+- Safe for monitoring - cannot place or modify orders
 
 ### WebSocket Monitor (`binance_monitor.py`)
-- Real-time monitoring of order status changes
-- Automatic sell order placement when buy orders are filled
+- Real-time monitoring of order status changes using read-only API
+- Automatic sell order placement when buy orders are filled using trading API
 - Default 5% profit margin for sell orders
 - Live account balance updates
+- Uses both API keys (read-only for monitoring, trading for placing orders)
 
 ### Debug Utility (`binance_sell.py`)
 - Command-line utility for testing sell order placement
 - Useful for verifying API permissions and order parameters
 - Supports custom price and quantity settings
+- Uses trading API key (BINANCE_TRADE_API_KEY)
+- Requires "Enable Trading" permission
 
 ## Installation
 
@@ -50,16 +53,36 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file with your Binance API credentials:
+4. Create a `.env` file with your API credentials:
 ```
-# Read-only API key (for monitoring)
+# Read-only API key (for monitoring orders and prices)
 BINANCE_API_KEY=your_read_only_api_key_here
 BINANCE_API_SECRET=your_read_only_api_secret_here
 
 # Write-enabled API key (for placing orders)
-BINANCE_TRADE_API_KEY=your_write_api_key_here
-BINANCE_TRADE_API_SECRET=your_write_api_secret_here
+BINANCE_TRADE_API_KEY=your_write_enabled_api_key_here
+BINANCE_TRADE_API_SECRET=your_write_enabled_api_secret_here
+
+# OpenRouter API key (for AI trading recommendations)
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 ```
+
+To get your Binance API credentials:
+1. Log in to your Binance account
+2. Go to Profile > API Management
+3. Create two API keys:
+   - One with "Read Only" permissions for monitoring
+   - One with "Enable Trading" permission for placing orders
+4. Save your API Keys and Secret Keys securely
+
+To get your OpenRouter API key:
+1. Visit https://openrouter.ai/
+2. Sign up or log in to your account
+3. Go to the Keys section
+4. Create a new API key
+5. Copy the key and save it securely
+
+Note: Keep your API keys secure and never share them. The `.env` file is included in `.gitignore` for security.
 
 ## Usage
 
@@ -226,6 +249,30 @@ python binance_orders.py --token_history --pair BTCUSDC --interval 15m --limit 5
 
 # Show in table format with details
 python binance_orders.py --token_history --table --verbose
+```
+
+### Monitor Orders with Auto-Sell (binance_monitor.py)
+```bash
+# Start WebSocket monitor with default 5% profit target
+python binance_monitor.py
+
+# The monitor will:
+# 1. Watch for your buy orders being filled
+# 2. Automatically place sell orders at 5% higher price
+# 3. Show real-time account updates
+# 4. Display order status changes
+```
+
+### Manual Sell Orders (binance_sell.py)
+```bash
+# Place a sell order for TRUMP/USDC
+python binance_sell.py --quantity 0.028 --price 42.50
+
+# Place a sell order for a different trading pair
+python binance_sell.py --symbol BTCUSDC --quantity 0.001 --price 45000.00
+
+# Note: Minimum order value must be at least 1 USDC
+# Example: quantity * price >= 1
 ```
 
 ### Get AI Trading Recommendations
