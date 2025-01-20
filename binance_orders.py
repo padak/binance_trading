@@ -16,19 +16,21 @@ load_dotenv()
 # Get API keys from environment variables
 API_KEY = os.getenv('BINANCE_API_KEY')
 API_SECRET = os.getenv('BINANCE_API_SECRET')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 
 # Valid intervals for Binance API
 VALID_INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']
 
 # Available GPT models
-GPT_MODELS = {
-    'gpt4': 'gpt-4',
-    'gpt4-turbo': 'gpt-4-turbo-preview',
-    'gpt3.5': 'gpt-3.5-turbo',
-    'gpt4o': 'openai/gpt-4',
-    'gpt4o-mini': 'openai/gpt-4-32k',
-    'o1': 'anthropic/claude-3-opus'
+AI_MODELS = {
+    # OpenRouter models
+    'gpt4o': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'openai/gpt-4o-2024-11-20'},
+    'gpt4-turbo': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'openai/gpt-4-turbo'},
+    'gpt3.5': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'openai/gpt-3.5-turbo-0613'},
+    'claude3.5-haiku': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'anthropic/claude-3.5-haiku-20241022'},
+    'claude3.5-sonnet': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'anthropic/claude-3.5-sonnet'},
+    'mistral-codestral': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'mistralai/codestral-2501'},
+    'deepseek': {'endpoint': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'deepseek/deepseek-r1'}
 }
 
 class BinanceOrderManager:
@@ -41,8 +43,8 @@ class BinanceOrderManager:
         if not self.api_key or not self.api_secret:
             raise ValueError("API keys are not set. Please set them in the .env file.")
         
-        if not OPENAI_API_KEY:
-            raise ValueError("OpenAI API key is not set. Please set OPENAI_API_KEY in the .env file.")
+        if not OPENROUTER_API_KEY:
+            raise ValueError("OpenRouter API key is not set. Please set OPENROUTER_API_KEY in the .env file.")
         
         self.client = Client(api_key=self.api_key, api_secret=self.api_secret)
 
@@ -63,12 +65,12 @@ class BinanceOrderManager:
         
         return df
 
-    def get_trading_recommendation(self, history_data, full_data=False, gpt_model='gpt4', concise=False):
-        """Get trading recommendations from ChatGPT based on historical data
+    def get_trading_recommendation(self, history_data, full_data=False, ai_model='claude3', concise=False):
+        """Get trading recommendations from AI based on historical data
         Args:
             history_data: DataFrame with historical price data
-            full_data: If True, sends complete dataset to GPT. If False, sends last 20 records.
-            gpt_model: GPT model to use (gpt4, gpt4-turbo, gpt3.5)
+            full_data: If True, sends complete dataset to AI. If False, sends last 20 records.
+            ai_model: AI model to use (gpt4, gpt4-turbo, gpt3.5, gpt4o, gpt4o-mini, claude3)
             concise: If True, returns only buy/sell orders without analysis"""
         try:
             # Prepare the prompt with historical data analysis
@@ -109,11 +111,11 @@ Historical price data ({len(history_data) if full_data else 20} intervals):
             # Create table with headers
             headers = ['Time', 'Open', 'Close', 'High', 'Low', 'Change%', 'Volume', 'MA5', 'MA20', 'VWAP']
             table_format = tabulate(table_data, headers=headers, tablefmt='pipe')
-            
             prompt += table_format
 
             if concise:
-                prompt += """\n\nProvide only buy and sell orders in the following format:
+                prompt += """\n\nProvide only buy and sell orders in the following format (use plain text, no markdown):
+
 BUY ORDERS:
 1. Conservative: <price> USDC
 2. Medium: <price> USDC
@@ -124,29 +126,54 @@ SELL ORDERS:
 2. Medium: <price> USDC
 3. Aggressive: <price> USDC"""
             else:
-                prompt += """\n\nBased on this comprehensive historical data, please provide:
-1. Three strategic buy orders (conservative, medium, aggressive) with price targets and rationale
-2. Three strategic sell orders (conservative, medium, aggressive) with price targets and rationale
-3. Technical analysis including:
-   - Trend direction and strength
-   - Key support and resistance levels
-   - Volume analysis
-   - Price action patterns
-4. Short-term price prediction with confidence level
+                prompt += """\n\nBased on this comprehensive historical data, please provide (use plain text, no markdown or special formatting):
 
-Please format the response in a clear, structured way with specific price targets and detailed explanations."""
+1. STRATEGIC BUY ORDERS
+   For each order (Conservative, Medium, Aggressive):
+   - Entry Price: <price> USDC
+   - Rationale: <detailed explanation>
+   - Price Target: <target> USDC (<percentage>% gain)
+   - Stop Loss: <stop> USDC (<percentage>% loss)
 
-            # Call ChatGPT API
-            if gpt_model not in GPT_MODELS:
-                raise ValueError(f"Invalid GPT model. Must be one of: {', '.join(GPT_MODELS.keys())}")
+2. STRATEGIC SELL ORDERS
+   For each order (Conservative, Medium, Aggressive):
+   - Entry Price: <price> USDC
+   - Rationale: <detailed explanation>
+   - Price Target: <target> USDC (<percentage>% gain)
+   - Stop Loss: <stop> USDC (<percentage>% loss)
 
+3. TECHNICAL ANALYSIS
+   Trend Direction: <description>
+   Support Levels: <levels with explanations>
+   Resistance Levels: <levels with explanations>
+   Volume Analysis: <detailed volume analysis>
+   Price Patterns: <identified patterns and their implications>
+   Moving Averages: <MA5 and MA20 analysis>
+   VWAP Analysis: <VWAP interpretation>
+
+4. SHORT-TERM PREDICTION
+   Target Price: <price> USDC
+   Confidence Level: <percentage>
+   Timeframe: <period>
+   Risk Factors: <key risks to consider>
+   Market Sentiment: <current market sentiment>
+
+Please format the response in plain text without any special characters or markdown formatting."""
+
+            # Call AI API
+            if ai_model not in AI_MODELS:
+                raise ValueError(f"Invalid AI model. Must be one of: {', '.join(AI_MODELS.keys())}")
+
+            model_info = AI_MODELS[ai_model]
             headers = {
-                'Authorization': f'Bearer {OPENAI_API_KEY}',
+                'Authorization': f'Bearer {OPENROUTER_API_KEY}',
+                'HTTP-Referer': 'https://github.com/padak/binance_trading',
+                'X-Title': 'Binance TRUMP/USDC Order Manager',
                 'Content-Type': 'application/json'
             }
-            
+
             data = {
-                'model': GPT_MODELS[gpt_model],
+                'model': model_info['model'],
                 'messages': [
                     {'role': 'system', 'content': 'You are a cryptocurrency trading expert analyzing market data and providing strategic trading recommendations.'},
                     {'role': 'user', 'content': prompt}
@@ -155,7 +182,7 @@ Please format the response in a clear, structured way with specific price target
             }
             
             response = requests.post(
-                'https://api.openai.com/v1/chat/completions',
+                model_info['endpoint'],
                 headers=headers,
                 json=data
             )
@@ -174,7 +201,7 @@ Please format the response in a clear, structured way with specific price target
             if self.verbose:
                 print("Full error details:", str(e))
 
-    def get_token_history(self, symbol="TRUMPUSDC", interval='5m', limit=100, gpt_analysis=False, full_data=False, json_output=False, gpt_model='gpt4', concise=False):
+    def get_token_history(self, symbol="TRUMPUSDC", interval='5m', limit=100, ai_analysis=False, full_data=False, json_output=False, ai_model='claude3', concise=False):
         try:
             if self.verbose:
                 print(f"Fetching {symbol} price history for last {limit} {interval} intervals")
@@ -254,10 +281,10 @@ Please format the response in a clear, structured way with specific price target
                 return
             
             # Get trading recommendations if requested
-            if gpt_analysis:
+            if ai_analysis:
                 if self.verbose:
-                    print(f"Getting GPT analysis using {gpt_model} model {'with full data' if full_data else 'with last 20 records'}")
-                self.get_trading_recommendation(df, full_data=full_data, gpt_model=gpt_model, concise=concise)
+                    print(f"Getting AI analysis using {ai_model} model {'with full data' if full_data else 'with last 20 records'}")
+                self.get_trading_recommendation(df, full_data=full_data, ai_model=ai_model, concise=concise)
             
             # Prepare data for display
             table_data = []
@@ -617,15 +644,16 @@ Examples:
   # Show BTC/USDC price history with custom parameters
   python binance_orders.py --token_history --pair BTCUSDC --interval 15m --limit 50
 
-  # Get GPT trading recommendations (last 20 intervals)
-  python binance_orders.py --token_history --gpt
+  # Get AI trading recommendations (last 20 intervals)
+  python binance_orders.py --token_history --ask-ai
 
-  # Get GPT analysis with full dataset using GPT-4 Turbo
-  python binance_orders.py --token_history --gpt --full-data --gpt-model gpt4-turbo
+  # Get AI analysis with full dataset using GPT-4 Turbo
+  python binance_orders.py --token_history --ask-ai --full-data --ai-model gpt4-turbo
 
   # Get concise buy/sell orders only using different models
-  python binance_orders.py --token_history --gpt --concise --gpt-model gpt4o
-  python binance_orders.py --token_history --gpt --concise --gpt-model o1
+  python binance_orders.py --token_history --ask-ai --concise --ai-model gpt4o
+  python binance_orders.py --token_history --ask-ai --concise --ai-model claude3.5-sonnet
+  python binance_orders.py --token_history --ask-ai --concise --ai-model deepseek
 
   # Export price history as JSON
   python binance_orders.py --token_history --json
@@ -653,10 +681,10 @@ Examples:
                       help=f'Time interval (default: 5m). Valid intervals: {", ".join(VALID_INTERVALS)}')
     parser.add_argument('--limit', type=int, default=100,
                       help='Number of historical records to fetch (default: 100)')
-    parser.add_argument('--gpt', action='store_true',
-                      help='Get trading recommendations from GPT')
+    parser.add_argument('--ask-ai', action='store_true',
+                      help='Get trading recommendations from AI')
     parser.add_argument('--full-data', action='store_true',
-                      help='Send full dataset to GPT instead of last 20 records (only works with --gpt)')
+                      help='Send full dataset to AI instead of last 20 records (only works with --ask-ai)')
     parser.add_argument('--json', action='store_true',
                       help='Export data in JSON format')
     
@@ -664,8 +692,8 @@ Examples:
                       help='Show detailed processing information')
     parser.add_argument('--table', action='store_true',
                       help='Display results in table format')
-    parser.add_argument('--gpt-model', type=str, choices=list(GPT_MODELS.keys()), default='gpt4o-mini',
-                      help='GPT model to use for analysis (default: gpt4o-mini)')
+    parser.add_argument('--ai-model', type=str, choices=list(AI_MODELS.keys()), default='claude3',
+                      help='AI model to use for analysis (default: claude3)')
     parser.add_argument('--concise', action='store_true',
                       help='Show only buy/sell orders without detailed analysis')
 
@@ -685,10 +713,10 @@ Examples:
                 symbol=args.pair,
                 interval=args.interval,
                 limit=args.limit,
-                gpt_analysis=args.gpt,
+                ai_analysis=args.ask_ai,
                 full_data=args.full_data,
                 json_output=args.json,
-                gpt_model=args.gpt_model,
+                ai_model=args.ai_model,
                 concise=args.concise
             )
         else:

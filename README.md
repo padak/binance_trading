@@ -18,13 +18,14 @@ A powerful command-line tool for managing and analyzing TRUMP/USDC trading on Bi
   - Calculate potential profit/loss
 
 - **AI Trading Recommendations**
-  - Multiple AI models support:
-    - GPT-4 (OpenAI)
+  - Multiple AI models support through OpenRouter:
+    - GPT-4 (gpt4o)
     - GPT-4 Turbo
     - GPT-3.5 Turbo
-    - GPT-4 OpenRouter
-    - GPT-4-32k OpenRouter (Mini)
-    - Claude-3 Opus
+    - Claude-3.5 Haiku
+    - Claude-3.5 Sonnet
+    - Mistral Codestral
+    - DeepSeek R1
   - Technical analysis
   - Buy/Sell order suggestions
   - Price trend predictions
@@ -53,7 +54,7 @@ pip install -r requirements.txt
 ```
 BINANCE_API_KEY=your_binance_api_key
 BINANCE_API_SECRET=your_binance_api_secret
-OPENAI_API_KEY=your_openai_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
 ```
 
 ## Usage Examples
@@ -72,20 +73,21 @@ python binance_orders.py --token_history --table --verbose
 
 ### Get AI Trading Recommendations
 ```bash
-# Default analysis with GPT-4-32k OpenRouter
-python binance_orders.py --token_history --gpt
+# Default analysis with Claude-3.5 Sonnet
+python binance_orders.py --token_history --ask-ai
 
 # Use different AI models
-python binance_orders.py --token_history --gpt --gpt-model gpt4  # OpenAI GPT-4
-python binance_orders.py --token_history --gpt --gpt-model gpt4-turbo  # GPT-4 Turbo
-python binance_orders.py --token_history --gpt --gpt-model gpt4o  # OpenRouter GPT-4
-python binance_orders.py --token_history --gpt --gpt-model o1  # Claude-3 Opus
+python binance_orders.py --token_history --ask-ai --ai-model gpt4o  # GPT-4
+python binance_orders.py --token_history --ask-ai --ai-model gpt4-turbo  # GPT-4 Turbo
+python binance_orders.py --token_history --ask-ai --ai-model claude3.5-haiku  # Claude-3.5 Haiku
+python binance_orders.py --token_history --ask-ai --ai-model mistral-codestral  # Mistral Codestral
+python binance_orders.py --token_history --ask-ai --ai-model deepseek  # DeepSeek R1
 
 # Get concise buy/sell orders only
-python binance_orders.py --token_history --gpt --concise
+python binance_orders.py --token_history --ask-ai --concise
 
 # Analysis with full dataset
-python binance_orders.py --token_history --gpt --full-data
+python binance_orders.py --token_history --ask-ai --full-data
 ```
 
 ### Manage Orders
@@ -145,6 +147,133 @@ Use `--json` for programmatic access:
     }
   ]
 }
+```
+
+### AI Trading Recommendations Example
+Using `--ask-ai` (with Claude-3.5 Sonnet):
+```
+Trading Recommendations:
+================================================================================
+1. STRATEGIC BUY ORDERS
+
+Conservative:
+- Entry Price: 39.92 USDC
+- Rationale: The current price is near the recent low of 35.16 USDC, indicating a potential rebound. The volume is average, suggesting a steady market with potential for a gradual recovery.
+- Price Target: 42.00 USDC (5% gain)
+- Stop Loss: 38.00 USDC (5% loss)
+
+Medium:
+- Entry Price: 38.50 USDC
+- Rationale: Strong support level with increasing volume, suggesting accumulation phase.
+- Price Target: 41.50 USDC (8% gain)
+- Stop Loss: 36.50 USDC (5% loss)
+
+Aggressive:
+- Entry Price: 37.20 USDC
+- Rationale: Major support zone with historical bounces and high volume.
+- Price Target: 43.00 USDC (15% gain)
+- Stop Loss: 35.00 USDC (6% loss)
+
+2. STRATEGIC SELL ORDERS
+
+Conservative:
+- Entry Price: 41.50 USDC
+- Rationale: Near recent resistance with declining volume.
+- Price Target: 40.00 USDC (4% gain)
+- Stop Loss: 43.00 USDC (4% loss)
+
+Medium:
+- Entry Price: 42.50 USDC
+- Rationale: Historical resistance level with bearish divergence.
+- Price Target: 39.50 USDC (7% gain)
+- Stop Loss: 44.50 USDC (5% loss)
+
+Aggressive:
+- Entry Price: 44.00 USDC
+- Rationale: Major resistance zone with overbought indicators.
+- Price Target: 38.00 USDC (14% gain)
+- Stop Loss: 46.00 USDC (5% loss)
+
+3. TECHNICAL ANALYSIS
+Trend Direction: Bearish with -23.39% change over last period
+Support Levels: 38.90 (major), 37.50 (weekly), 36.00 (monthly)
+Resistance Levels: 42.50 (immediate), 44.00 (major), 46.00 (yearly high)
+Volume Analysis: Average volume 65,240.24, showing accumulation at support levels
+Price Patterns: Double bottom forming at 37.50 level
+Moving Averages: MA5 below MA20, indicating bearish trend
+VWAP Analysis: Price trading below VWAP, suggesting selling pressure
+
+4. SHORT-TERM PREDICTION
+Target Price: 41.00 USDC
+Confidence Level: 70%
+Timeframe: 24-48 hours
+Risk Factors: High market volatility, upcoming platform updates
+Market Sentiment: Neutral with bearish bias
+```
+
+For concise output, use `--ask-ai --concise` to get only the buy/sell orders:
+```
+BUY ORDERS:
+1. Conservative: 38.90 USDC
+2. Medium: 40.80 USDC
+3. Aggressive: 41.90 USDC
+
+SELL ORDERS:
+1. Conservative: 41.50 USDC
+2. Medium: 42.50 USDC
+3. Aggressive: 43.50 USDC
+```
+
+## AI Prompt Structure
+
+The tool sends the following data structure to AI models for analysis:
+
+```
+Based on the following cryptocurrency trading data for the last period:
+- Current Price: <price> USDC
+- Highest Price: <price> USDC
+- Lowest Price: <price> USDC
+- Price Change: <percentage>%
+- Average Volume: <volume>
+
+Historical price data (20 or full dataset intervals):
+| Time | Open | Close | High | Low | Change% | Volume | MA5 | MA20 | VWAP |
+|------|------|-------|------|-----|---------|--------|-----|------|------|
+| ...  | ...  | ...   | ... | ... | ...     | ...    | ... | ...  | ...  |
+
+For concise mode (--concise flag), the response format:
+BUY ORDERS:
+1. Conservative: <price> USDC
+2. Medium: <price> USDC
+3. Aggressive: <price> USDC
+
+SELL ORDERS:
+1. Conservative: <price> USDC
+2. Medium: <price> USDC
+3. Aggressive: <price> USDC
+
+For full analysis mode (default), the response format:
+1. STRATEGIC BUY ORDERS
+   Conservative: <price> USDC - <brief rationale>
+   Medium: <price> USDC - <brief rationale>
+   Aggressive: <price> USDC - <brief rationale>
+
+2. STRATEGIC SELL ORDERS
+   Conservative: <price> USDC - <brief rationale>
+   Medium: <price> USDC - <brief rationale>
+   Aggressive: <price> USDC - <brief rationale>
+
+3. TECHNICAL ANALYSIS
+   Trend Direction: <description>
+   Support Levels: <levels>
+   Resistance Levels: <levels>
+   Volume Analysis: <analysis>
+   Price Patterns: <patterns>
+
+4. SHORT-TERM PREDICTION
+   Target Price: <price> USDC
+   Confidence Level: <percentage>
+   Timeframe: <period>
 ```
 
 ## Security Notes
