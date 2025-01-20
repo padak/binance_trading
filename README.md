@@ -1,6 +1,146 @@
 # Binance TRUMP/USDC Order Manager
 
-A powerful command-line tool for managing and analyzing TRUMP/USDC trading on Binance. Features advanced price analysis, AI-powered trading recommendations, and comprehensive order management.
+A command-line tool for managing and viewing TRUMP/USDC orders on Binance, with automatic sell order placement.
+
+## Features
+
+- View pending buy/sell orders
+- View order history
+- View TRUMP token price history
+- Display results in table format
+- Real-time order monitoring via WebSocket
+- Automatic sell order placement
+- AI-powered trading recommendations
+
+## Scripts
+
+### Main Order Management Script (`binance_orders.py`)
+- View pending orders
+- Check order history
+- Get price history
+- Get AI recommendations for trading
+
+### WebSocket Monitor (`binance_monitor.py`)
+- Real-time monitoring of order status changes
+- Automatic sell order placement when buy orders are filled
+- Default 5% profit margin for sell orders
+- Live account balance updates
+
+### Debug Utility (`binance_sell.py`)
+- Command-line utility for testing sell order placement
+- Useful for verifying API permissions and order parameters
+- Supports custom price and quantity settings
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd binance
+```
+
+2. Create a virtual environment and activate it:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Create a `.env` file with your Binance API credentials:
+```
+# Read-only API key (for monitoring)
+BINANCE_API_KEY=your_read_only_api_key_here
+BINANCE_API_SECRET=your_read_only_api_secret_here
+
+# Write-enabled API key (for placing orders)
+BINANCE_TRADE_API_KEY=your_write_api_key_here
+BINANCE_TRADE_API_SECRET=your_write_api_secret_here
+```
+
+## Usage
+
+### View Order History
+```bash
+# Show last 2 days of orders (default)
+python binance_orders.py --orders_history
+
+# Show last 5 days of orders
+python binance_orders.py --orders_history 5 --pair TRUMPUSDC
+
+# Show in table format
+python binance_orders.py --orders_history 5 --table
+```
+
+### View Pending Orders
+```bash
+# Show all pending orders
+python binance_orders.py --buy_orders
+python binance_orders.py --sell_orders
+
+# Show orders for specific trading pair
+python binance_orders.py --buy_orders --pair BTCUSDC
+```
+
+### Monitor Orders and Auto-Sell
+```bash
+# Start WebSocket monitor (auto-sells when buy orders fill)
+python binance_monitor.py
+```
+
+### Manual Sell Order (Debug)
+```bash
+# Place a sell order with specific parameters
+python binance_sell.py --quantity 0.028 --price 40.50
+
+# Place a sell order for different trading pair
+python binance_sell.py --symbol BTCUSDC --quantity 0.001 --price 45000.00
+```
+
+### Get AI Trading Recommendations
+```bash
+# Get recommendations with default settings
+python binance_orders.py --token_history --ask-ai
+
+# Get concise recommendations
+python binance_orders.py --token_history --ask-ai --concise
+
+# Use specific AI model
+python binance_orders.py --token_history --ask-ai --ai-model claude3
+```
+
+## AI Trading Recommendations Example
+
+The AI provides detailed analysis including:
+- Strategic buy/sell orders with price targets
+- Technical analysis and trend direction
+- Support and resistance levels
+- Volume analysis
+- Short-term price prediction
+- Expected return after fees (0.1% per trade)
+
+Example output:
+```
+Buy Orders:
+- Conservative: 38.00 USDC (Support level)
+- Medium: 40.00 USDC (Moving average)
+- Aggressive: 41.50 USDC (Resistance test)
+
+Sell Orders:
+- Conservative: 45.00 USDC (+5.2% after fees)
+- Medium: 48.00 USDC (+11.8% after fees)
+- Aggressive: 51.00 USDC (+18.4% after fees)
+```
+
+## Security Note
+
+- Never commit your `.env` file or expose your API credentials
+- Use read-only API keys for monitoring
+- Use separate API keys with trading permissions for order placement
+- The `.env` file is included in `.gitignore` for security
 
 ## Features
 
