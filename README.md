@@ -12,10 +12,11 @@ A powerful command-line tool for managing and analyzing TRUMP/USDC trading on Bi
   - Export data in JSON format
 
 - **Order Management**
-  - View pending buy/sell orders
+  - View pending buy/sell orders for any trading pair
   - Track order history
   - Monitor order execution status
   - Calculate potential profit/loss
+  - Display orders in table format
 
 - **AI Trading Recommendations**
   - Multiple AI models support through OpenRouter:
@@ -108,17 +109,25 @@ python binance_orders.py --token_history --ask-ai --full-data
 
 ### Manage Orders
 ```bash
-# View pending buy orders
+# View pending buy orders for TRUMP/USDC (default)
 python binance_orders.py --buy_orders
 
-# View pending sell orders
+# View pending sell orders for TRUMP/USDC (default)
 python binance_orders.py --sell_orders
+
+# View orders for other trading pairs
+python binance_orders.py --buy_orders --pair BTCUSDC
+python binance_orders.py --sell_orders --pair ETHUSDC
 
 # View order history (last 2 days)
 python binance_orders.py --orders_history
 
 # View order history for specific period
 python binance_orders.py --orders_history 5  # Last 5 days
+
+# Show orders in table format
+python binance_orders.py --buy_orders --table
+python binance_orders.py --sell_orders --pair BTCUSDC --table
 ```
 
 ### Export Data
