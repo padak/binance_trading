@@ -1,5 +1,30 @@
 # TODO List
 
+## Completed ✅
+- Basic order viewing functionality
+- Price history with intervals
+- Support for different trading pairs
+- Table output format
+- JSON data export
+- AI trading recommendations
+- Multiple AI models support
+- WebSocket monitoring with auto-sell
+- Separate API keys for reading and trading
+
+## In Progress 🚧
+- Backtesting functionality
+- Historical performance analysis
+- Portfolio tracking
+- Risk management features
+
+## Planned 📋
+- Email/Telegram notifications
+- Custom trading strategies
+- Multiple exchange support
+- Docker containerization
+- Unit tests
+- CI/CD pipeline
+
 ## WebSocket Integration
 - Implement real-time order status monitoring using Binance WebSocket API
 - Features to implement:
