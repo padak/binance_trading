@@ -34,10 +34,9 @@ AI_MODELS = {
 }
 
 class BinanceOrderManager:
-    def __init__(self, api_key=None, api_secret=None, verbose=False, table_format=False):
+    def __init__(self, api_key=None, api_secret=None, table_format=False):
         self.api_key = api_key or API_KEY
         self.api_secret = api_secret or API_SECRET
-        self.verbose = verbose
         self.table_format = table_format
         
         if not self.api_key or not self.api_secret:
@@ -198,13 +197,10 @@ Please format the response in plain text without any special characters or markd
                 
         except Exception as e:
             print(f"Error getting trading recommendations: {e}")
-            if self.verbose:
-                print("Full error details:", str(e))
 
-    def get_token_history(self, symbol="TRUMPUSDC", interval='5m', limit=100, ai_analysis=False, full_data=False, json_output=False, ai_model='claude3', concise=False):
+    def get_token_history(self, symbol="TRUMPUSDC", interval='5m', limit=100, ai_analysis=False, full_data=False, json_output=False, ai_model='deepseek', concise=False):
         try:
-            if self.verbose:
-                print(f"Fetching {symbol} price history for last {limit} {interval} intervals")
+            print(f"\nFetching {symbol} price history (last {limit} {interval} intervals)")
             
             # Validate interval
             if interval not in VALID_INTERVALS:
@@ -329,8 +325,6 @@ Please format the response in plain text without any special characters or markd
                 
         except Exception as e:
             print(f"Error fetching token history: {e}")
-            if self.verbose:
-                print("Full error details:", str(e))
 
     def get_current_price(self, symbol):
         try:
@@ -661,8 +655,8 @@ Examples:
   # Export custom data range as JSON
   python binance_orders.py --token_history --pair BTCUSDC --interval 1h --limit 24 --json
 
-  # Show all data in table format with verbose output
-  python binance_orders.py --token_history --table --verbose
+  # Show all data in table format
+  python binance_orders.py --token_history --table
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -688,8 +682,6 @@ Examples:
     parser.add_argument('--json', action='store_true',
                       help='Export data in JSON format')
     
-    parser.add_argument('--verbose', '-v', action='store_true',
-                      help='Show detailed processing information')
     parser.add_argument('--table', action='store_true',
                       help='Display results in table format')
     parser.add_argument('--ai-model', type=str, choices=list(AI_MODELS.keys()), default='deepseek',
@@ -700,13 +692,16 @@ Examples:
     args = parser.parse_args()
 
     try:
-        manager = BinanceOrderManager(verbose=args.verbose, table_format=args.table)
+        manager = BinanceOrderManager(table_format=args.table)
         
         if args.sell_orders:
+            print("\nFetching pending sell orders...")
             manager.get_pending_orders(side='SELL')
         elif args.buy_orders:
+            print("\nFetching pending buy orders...")
             manager.get_pending_orders(side='BUY')
         elif args.orders_history is not None:
+            print(f"\nFetching order history for the last {args.orders_history} days...")
             manager.get_order_history(days=args.orders_history)
         elif args.token_history:
             manager.get_token_history(
