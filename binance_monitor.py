@@ -6,6 +6,14 @@ from dotenv import load_dotenv
 import logging
 import time
 
+"""
+Binance WebSocket Monitor
+Uses WSS (WebSocket Secure) by default:
+- Connects to wss://stream.binance.com:9443
+- All data is encrypted using TLS/SSL
+- Automatic handling of secure connection by ThreadedWebsocketManager
+"""
+
 # Load environment variables
 load_dotenv()
 # Read-only API keys for monitoring
@@ -53,7 +61,7 @@ def place_sell_order(symbol, quantity, buy_price):
         logger.error(f"Error placing sell order: {e}")
 
 def process_message(msg):
-    """Process incoming WebSocket message"""
+    """Process incoming WebSocket message (received over WSS)"""
     try:
         if not isinstance(msg, dict):
             return
@@ -108,13 +116,14 @@ def main():
     twm = None
     try:
         # Initialize ThreadedWebsocketManager with read-only API keys
+        # Uses WSS (WebSocket Secure) by default: wss://stream.binance.com:9443
         twm = ThreadedWebsocketManager(api_key=API_KEY, api_secret=API_SECRET)
         twm.start()
         
-        print("Starting Binance order monitor...")
+        print("Starting Binance order monitor (WSS)...")
         print("Press Ctrl+C to exit")
         
-        # Start user data socket
+        # Start user data socket (secure WebSocket connection)
         conn_key = twm.start_user_socket(callback=process_message)
         
         # Keep the script running
