@@ -266,39 +266,50 @@ Historical price data (20 or full dataset intervals):
 |------|------|-------|------|-----|---------|--------|-----|------|------|
 | ...  | ...  | ...   | ... | ... | ...     | ...    | ... | ...  | ...  |
 
+Note: Include transaction fees (0.1% per trade) in your calculations.
+
 For concise mode (--concise flag), the response format:
 BUY ORDERS:
 1. Conservative: <price> USDC
 2. Medium: <price> USDC
 3. Aggressive: <price> USDC
 
-SELL ORDERS:
-1. Conservative: <price> USDC
-2. Medium: <price> USDC
-3. Aggressive: <price> USDC
+SELL ORDERS: (include potential earnings % after fees)
+1. Conservative: <price> USDC (+<percentage>% after fees)
+2. Medium: <price> USDC (+<percentage>% after fees)
+3. Aggressive: <price> USDC (+<percentage>% after fees)
 
 For full analysis mode (default), the response format:
 1. STRATEGIC BUY ORDERS
-   Conservative: <price> USDC - <brief rationale>
-   Medium: <price> USDC - <brief rationale>
-   Aggressive: <price> USDC - <brief rationale>
+   For each order (Conservative, Medium, Aggressive):
+   - Entry Price: <price> USDC
+   - Rationale: <detailed explanation>
+   - Price Target: <target> USDC (+<percentage>% after fees)
+   - Stop Loss: <stop> USDC (-<percentage>% after fees)
 
 2. STRATEGIC SELL ORDERS
-   Conservative: <price> USDC - <brief rationale>
-   Medium: <price> USDC - <brief rationale>
-   Aggressive: <price> USDC - <brief rationale>
+   For each order (Conservative, Medium, Aggressive):
+   - Entry Price: <price> USDC
+   - Rationale: <detailed explanation>
+   - Price Target: <target> USDC (+<percentage>% after fees)
+   - Stop Loss: <stop> USDC (-<percentage>% after fees)
 
 3. TECHNICAL ANALYSIS
    Trend Direction: <description>
-   Support Levels: <levels>
-   Resistance Levels: <levels>
-   Volume Analysis: <analysis>
-   Price Patterns: <patterns>
+   Support Levels: <levels with explanations>
+   Resistance Levels: <levels with explanations>
+   Volume Analysis: <detailed volume analysis>
+   Price Patterns: <identified patterns and implications>
+   Moving Averages: <MA5 and MA20 analysis>
+   VWAP Analysis: <VWAP interpretation>
 
 4. SHORT-TERM PREDICTION
    Target Price: <price> USDC
+   Expected Return: <percentage>% after fees
    Confidence Level: <percentage>
    Timeframe: <period>
+   Risk Factors: <key risks to consider>
+   Market Sentiment: <current market sentiment>
 ```
 
 ## Security Notes

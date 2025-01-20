@@ -114,32 +114,34 @@ Historical price data ({len(history_data) if full_data else 20} intervals):
 
             if concise:
                 prompt += """\n\nProvide only buy and sell orders in the following format (use plain text, no markdown):
+Note: Include transaction fees (0.1% per trade) in your calculations.
 
 BUY ORDERS:
 1. Conservative: <price> USDC
 2. Medium: <price> USDC
 3. Aggressive: <price> USDC
 
-SELL ORDERS:
-1. Conservative: <price> USDC
-2. Medium: <price> USDC
-3. Aggressive: <price> USDC"""
+SELL ORDERS: (include potential earnings % after fees)
+1. Conservative: <price> USDC (+<percentage>% after fees)
+2. Medium: <price> USDC (+<percentage>% after fees)
+3. Aggressive: <price> USDC (+<percentage>% after fees)"""
             else:
                 prompt += """\n\nBased on this comprehensive historical data, please provide (use plain text, no markdown or special formatting):
+Note: Include transaction fees (0.1% per trade) in your calculations.
 
 1. STRATEGIC BUY ORDERS
    For each order (Conservative, Medium, Aggressive):
    - Entry Price: <price> USDC
    - Rationale: <detailed explanation>
-   - Price Target: <target> USDC (<percentage>% gain)
-   - Stop Loss: <stop> USDC (<percentage>% loss)
+   - Price Target: <target> USDC (+<percentage>% after fees)
+   - Stop Loss: <stop> USDC (-<percentage>% after fees)
 
 2. STRATEGIC SELL ORDERS
    For each order (Conservative, Medium, Aggressive):
    - Entry Price: <price> USDC
    - Rationale: <detailed explanation>
-   - Price Target: <target> USDC (<percentage>% gain)
-   - Stop Loss: <stop> USDC (<percentage>% loss)
+   - Price Target: <target> USDC (+<percentage>% after fees)
+   - Stop Loss: <stop> USDC (-<percentage>% after fees)
 
 3. TECHNICAL ANALYSIS
    Trend Direction: <description>
@@ -152,6 +154,7 @@ SELL ORDERS:
 
 4. SHORT-TERM PREDICTION
    Target Price: <price> USDC
+   Expected Return: <percentage>% after fees
    Confidence Level: <percentage>
    Timeframe: <period>
    Risk Factors: <key risks to consider>
