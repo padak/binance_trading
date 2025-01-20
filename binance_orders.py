@@ -489,18 +489,18 @@ Please format the response in plain text without any special characters or markd
         else:
             print("No orders to display")
 
-    def get_pending_orders(self, side=None):
+    def get_pending_orders(self, side=None, symbol="TRUMPUSDC"):
         try:
-            # Get TRUMP/USDC orders
-            trump_orders = self.client.get_open_orders(symbol="TRUMPUSDC")
+            # Get orders for the specified symbol
+            orders = self.client.get_open_orders(symbol=symbol)
             
             # Filter by side if specified
-            filtered_orders = [order for order in trump_orders if not side or order['side'] == side.upper()]
+            filtered_orders = [order for order in orders if not side or order['side'] == side.upper()]
             
             if not filtered_orders:
-                print(f"No pending {'buy' if side == 'BUY' else 'sell' if side == 'SELL' else ''} orders for TRUMP/USDC")
+                print(f"No pending {'buy' if side == 'BUY' else 'sell' if side == 'SELL' else ''} orders for {symbol}")
             else:
-                print(f"Open TRUMP/USDC {'buy' if side == 'BUY' else 'sell' if side == 'SELL' else ''} orders:")
+                print(f"Open {symbol} {'buy' if side == 'BUY' else 'sell' if side == 'SELL' else ''} orders:")
                 if self.table_format:
                     self.print_orders_table(filtered_orders)
                 else:
@@ -598,11 +598,15 @@ def main():
         description='Binance Order Management Tool',
         epilog="""
 Examples:
-  # Show pending buy orders
+  # Show pending buy orders for TRUMP/USDC
   python binance_orders.py --buy_orders
 
-  # Show pending sell orders
+  # Show pending sell orders for TRUMP/USDC
   python binance_orders.py --sell_orders
+
+  # Show pending orders for other pairs
+  python binance_orders.py --buy_orders --pair BTCUSDC
+  python binance_orders.py --sell_orders --pair ETHUSDC
 
   # Show order history for last 5 days
   python binance_orders.py --orders_history 5
@@ -643,7 +647,7 @@ Examples:
     group.add_argument('--token_history', action='store_true',
                       help='Show token price history')
     
-    # New parameters
+    # Parameters
     parser.add_argument('--pair', type=str, default="TRUMPUSDC",
                       help='Trading pair symbol (default: TRUMPUSDC)')
     parser.add_argument('--interval', type=str, default="5m",
@@ -670,11 +674,11 @@ Examples:
         manager = BinanceOrderManager(table_format=args.table)
         
         if args.sell_orders:
-            print("\nFetching pending sell orders...")
-            manager.get_pending_orders(side='SELL')
+            print(f"\nFetching pending sell orders for {args.pair}...")
+            manager.get_pending_orders(side='SELL', symbol=args.pair)
         elif args.buy_orders:
-            print("\nFetching pending buy orders...")
-            manager.get_pending_orders(side='BUY')
+            print(f"\nFetching pending buy orders for {args.pair}...")
+            manager.get_pending_orders(side='BUY', symbol=args.pair)
         elif args.orders_history is not None:
             print(f"\nFetching order history for the last {args.orders_history} days...")
             manager.get_order_history(days=args.orders_history)
