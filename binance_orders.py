@@ -513,17 +513,16 @@ Please format the response in plain text without any special characters or markd
         except Exception as e:
             print(f"Error loading orders: {e}")
 
-    def get_order_history(self, days=2):
+    def get_order_history(self, days=2, symbol="TRUMPUSDC"):
         try:
             # Calculate start time
             start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
             
             all_orders = []
             
-            # Try to get TRUMP/USDC trading history using my trades
             try:
-                # Try my trades first
-                trades = self.client.get_my_trades(symbol="TRUMPUSDC", limit=1000)
+                # Get trades history
+                trades = self.client.get_my_trades(symbol=symbol, limit=1000)
                 if trades:
                     for trade in trades:
                         order = {
@@ -540,51 +539,25 @@ Please format the response in plain text without any special characters or markd
                         all_orders.append(order)
                 
                 # Also get current open orders
-                open_orders = self.client.get_open_orders(symbol="TRUMPUSDC")
+                open_orders = self.client.get_open_orders(symbol=symbol)
                 if open_orders:
                     all_orders.extend(open_orders)
                 
             except Exception as e:
-                print(f"Error fetching TRUMP/USDC trades: {e}")
-            
-            # Try to get USDC fiat purchase history
-            try:
-                # Try both EUR and USDT pairs for fiat
-                for fiat_pair in ['EUR', 'USDT']:
-                    try:
-                        trades = self.client.get_my_trades(symbol=f"USDC{fiat_pair}", limit=1000)
-                        if trades:
-                            for trade in trades:
-                                order = {
-                                    'symbol': f"USDC{fiat_pair}",
-                                    'orderId': trade['orderId'],
-                                    'price': trade['price'],
-                                    'origQty': trade['qty'],
-                                    'executedQty': trade['qty'],
-                                    'type': 'FIAT',
-                                    'side': 'BUY' if trade['isBuyer'] else 'SELL',
-                                    'status': 'FILLED',
-                                    'time': trade['time']
-                                }
-                                all_orders.append(order)
-                    except Exception as e:
-                        print(f"Error fetching USDC{fiat_pair} trades: {e}")
-                            
-            except Exception as e:
-                print(f"Error fetching fiat orders: {e}")
+                print(f"Error fetching trades for {symbol}: {e}")
             
             # Filter orders by time
             all_orders = [order for order in all_orders if int(order['time']) >= start_time]
             
             if not all_orders:
-                print("No orders found in the specified time period.")
+                print(f"No orders found for {symbol} in the last {days} days.")
                 print("Try increasing the number of days or check if you have any trades")
                 return
             
             # Sort orders by time
             all_orders.sort(key=lambda x: x['time'], reverse=True)
             
-            print(f"\nFound {len(all_orders)} orders in the last {days} days:")
+            print(f"\nFound {len(all_orders)} orders for {symbol} in the last {days} days:")
             if self.table_format:
                 self.print_orders_table(all_orders)
             else:
@@ -683,8 +656,8 @@ Examples:
             print(f"\nFetching pending buy orders for {args.pair}...")
             manager.get_pending_orders(side='BUY', symbol=args.pair)
         elif args.orders_history is not None:
-            print(f"\nFetching order history for the last {args.orders_history} days...")
-            manager.get_order_history(days=args.orders_history)
+            print(f"\nFetching order history for {args.pair} (last {args.orders_history} days)...")
+            manager.get_order_history(days=args.orders_history, symbol=args.pair)
         elif args.token_history:
             manager.get_token_history(
                 symbol=args.pair,
