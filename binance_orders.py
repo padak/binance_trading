@@ -584,8 +584,16 @@ Examples:
   python binance_orders.py --buy_orders --pair BTCUSDC
   python binance_orders.py --sell_orders --pair ETHUSDC
 
-  # Show order history for last 5 days
-  python binance_orders.py --orders_history 5
+  # Show order history (default: TRUMP/USDC)
+  python binance_orders.py --orders_history 5  # Last 5 days
+
+  # Show order history for other pairs
+  python binance_orders.py --orders_history 5 --pair BTCUSDC  # BTC/USDC trades
+  python binance_orders.py --orders_history 3 --pair ETHUSDC  # ETH/USDC trades
+
+  # Show order history in table format
+  python binance_orders.py --orders_history 5 --table  # TRUMP/USDC in table
+  python binance_orders.py --orders_history 5 --pair BTCUSDC --table  # BTC/USDC in table
 
   # Show TRUMP/USDC price history (last 100 intervals of 5min)
   python binance_orders.py --token_history
