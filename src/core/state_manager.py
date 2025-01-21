@@ -162,18 +162,42 @@ class StateManager:
         
         return sell_value - buy_value - buy_fee - sell_fee
     
-    async def consult_ai(self, market_data: Dict) -> Dict:
+    async def consult_ai(self, action: str, market_data: Dict, sentiment_data: Dict, correlation_data: Dict) -> Dict:
         """
         Consult DeepSeek via OpenRouter for trading decisions
+        
+        Args:
+            action: "BUY" or "SELL"
+            market_data: Current market snapshot
+            sentiment_data: Social and news sentiment analysis
+            correlation_data: Market correlation analysis
+            
+        Returns:
+            Dict containing AI's recommendation with price, confidence, and reasoning
         """
         if not self.openrouter_api_key:
             logger.error("OpenRouter API key not found")
-            return {}
+            return {"confidence": 0, "price": 0, "reasoning": "AI consultation disabled - no API key"}
             
-        # Prepare the prompt with market data
-        prompt = self._prepare_ai_prompt(market_data)
-        logger.info(f"Sending prompt to AI: {prompt}")
-        
+        # Prepare the prompt with all available data
+        prompt = f"""Analyze the following market data for {self.symbol} and provide a {action} recommendation:
+
+Market Data:
+{json.dumps(market_data, indent=2)}
+
+Sentiment Analysis:
+{json.dumps(sentiment_data, indent=2)}
+
+Market Correlations:
+{json.dumps(correlation_data, indent=2)}
+
+Return ONLY a JSON object in this exact format:
+{{
+    "confidence": (0.0 to 1.0 indicating confidence in the recommendation),
+    "price": (recommended {action} price),
+    "reasoning": (brief explanation of the recommendation)
+}}"""
+
         try:
             async with aiohttp.ClientSession() as session:
                 headers = {
@@ -185,86 +209,35 @@ class StateManager:
                     "model": "deepseek/deepseek-r1",
                     "messages": [{"role": "user", "content": prompt}]
                 }
-                logger.info(f"Request headers: {headers}")
-                logger.info(f"Request payload: {payload}")
                 
                 async with session.post(
                     "https://openrouter.ai/api/v1/chat/completions",
                     headers=headers,
                     json=payload
                 ) as response:
-                    response_text = await response.text()
-                    logger.info(f"Response status: {response.status}")
-                    logger.info(f"Response body: {response_text}")
-                    
                     if response.status == 200:
                         result = await response.json()
-                        parsed_result = self._parse_ai_response(result)
-                        logger.info(f"Parsed AI response: {parsed_result}")
-                        return parsed_result
+                        content = result['choices'][0]['message']['content']
+                        
+                        # Extract JSON from potential markdown formatting
+                        if "```json" in content:
+                            content = content.split("```json")[1].split("```")[0]
+                        elif "```" in content:
+                            content = content.split("```")[1]
+                        content = content.strip()
+                        
+                        decision = json.loads(content)
+                        logger.info(f"AI {action} recommendation: {decision}")
+                        return decision
+                        
                     else:
-                        logger.error(f"AI consultation failed: {response_text}")
-                        return {}
+                        logger.error(f"AI consultation failed: {await response.text()}")
+                        return {"confidence": 0, "price": 0, "reasoning": f"API error: {response.status}"}
                         
         except Exception as e:
-            logger.error(f"Error during AI consultation: {str(e)}")
-            return {}
+            logger.error(f"Error in AI consultation: {e}")
+            return {"confidence": 0, "price": 0, "reasoning": f"Error: {str(e)}"}
     
-    def _prepare_ai_prompt(self, market_data: Dict) -> str:
-        """Prepare prompt for AI consultation with enhanced market context"""
-        return f"""
-        Analyze the following market data for {self.symbol} and suggest optimal buy/sell prices.
-        Current state: {self.current_state.value}
-        
-        Market Data:
-        {json.dumps(market_data, indent=2)}
-        
-        Historical Context:
-        - Price History (last 24h):
-          * High: {market_data.get('historical', {}).get('24h_high', 'N/A')}
-          * Low: {market_data.get('historical', {}).get('24h_low', 'N/A')}
-          * Volume: {market_data.get('historical', {}).get('24h_volume', 'N/A')}
-        - Recent Trades (last 100):
-          * Average Price: {market_data.get('historical', {}).get('avg_price', 'N/A')}
-          * Price Volatility: {market_data.get('historical', {}).get('volatility', 'N/A')}
-        - Market Sentiment:
-          * Buy/Sell Ratio: {market_data.get('sentiment', {}).get('buy_sell_ratio', 'N/A')}
-          * Large Orders (>1000 USDC): {market_data.get('sentiment', {}).get('large_orders', 'N/A')}
-        
-        Consider:
-        1. Price trends and volatility patterns over the last 24 hours
-        2. Current order book depth and imbalance
-        3. Technical indicators (MA5, MA20, VWAP)
-        4. Market sentiment from recent large orders
-        5. Trading fees (0.1% per trade)
-        6. Historical support/resistance levels
-        
-        Respond in JSON format with:
-        {{
-            "action": "buy" or "sell",
-            "base_price": suggested base price,
-            "price_range": [min_price, max_price],
-            "confidence": 0.0 to 1.0,
-            "reasoning": "detailed explanation including historical context"
-        }}
-        """
-    
-    def _parse_ai_response(self, response: Dict) -> Dict:
-        """Parse and validate AI response"""
-        try:
-            content = response['choices'][0]['message']['content']
-            # Remove markdown code blocks if present
-            content = content.strip()
-            if content.startswith('```json'):
-                content = content[7:]  # Remove ```json
-            if content.endswith('```'):
-                content = content[:-3]  # Remove ```
-            content = content.strip()
-            return json.loads(content)
-        except Exception as e:
-            logger.error(f"Error parsing AI response: {e}")
-            return {} 
-
     async def get_available_balance(self) -> Decimal:
         """Get available USDC balance"""
         try:
