@@ -1,68 +1,63 @@
 #!/usr/bin/env python3
 import os
-import time
+import asyncio
 from dotenv import load_dotenv
 from services.market_data import MarketDataService
 
-def main():
+async def print_market_data(snapshot):
+    """Print formatted market data"""
+    print("\n=== TRUMP/USDC Market Data ===")
+    print(f"\nCurrent Price: {snapshot.get('price', 'N/A')} USDC")
+    
+    print("\nOrder Book:")
+    print(f"Best Bid: {snapshot.get('best_bid', 'N/A')} USDC")
+    print(f"Best Ask: {snapshot.get('best_ask', 'N/A')} USDC")
+    print(f"Bid Volume: {snapshot.get('bid_volume', 0):.2f}")
+    print(f"Ask Volume: {snapshot.get('ask_volume', 0):.2f}")
+    
+    print("\nTechnical Indicators:")
+    print(f"MA5: {snapshot.get('ma5', 'N/A')}")
+    print(f"MA20: {snapshot.get('ma20', 'N/A')}")
+    print(f"VWAP: {snapshot.get('vwap', 'N/A')}")
+    
+    print("\nLiquidity Metrics:")
+    print(f"Spread: {snapshot.get('spread', 'N/A')}")
+    print(f"Bid Depth: {snapshot.get('bid_depth', 'N/A')}")
+    print(f"Ask Depth: {snapshot.get('ask_depth', 'N/A')}")
+    print(f"Cancel Rate: {snapshot.get('cancel_rate', 'N/A')}")
+
+async def main():
     # Load environment variables
     load_dotenv()
-    
-    # Get API keys from environment
     api_key = os.getenv('BINANCE_API_KEY')
     api_secret = os.getenv('BINANCE_API_SECRET')
     
     if not api_key or not api_secret:
-        print("Error: Please set BINANCE_API_KEY and BINANCE_API_SECRET in your .env file")
+        print("Error: Please set BINANCE_API_KEY and BINANCE_API_SECRET in .env file")
         return
     
     # Initialize market data service
-    market_data = MarketDataService(symbol="TRUMPUSDC")
+    market_data = MarketDataService("TRUMPUSDC")
     
     try:
         # Start the service
-        print("\nStarting Market Data Service for TRUMP/USDC...")
-        market_data.start(api_key=api_key, api_secret=api_secret)
+        await market_data.start(api_key, api_secret)
         
-        # Main loop to display data
-        while True:
-            snapshot = market_data.get_market_snapshot()
-            
-            # Clear screen (Unix/Linux/MacOS)
-            os.system('clear')
-            
-            print("\n=== TRUMP/USDC Market Data ===")
-            print(f"\nTimestamp: {snapshot['metadata']['timestamp']}")
-            
-            # Current price and indicators
-            print("\n--- Price & Indicators ---")
-            print(f"Current Price: {snapshot['market_state']['current_price']}")
-            indicators = snapshot['market_state']['technical_indicators']
-            print(f"MA5: {indicators['ma5']}")
-            print(f"MA20: {indicators['ma20']}")
-            print(f"VWAP: {indicators['vwap']}")
-            
-            # Order book information
-            print("\n--- Order Book ---")
-            volume = snapshot['market_state']['volume_profile']
-            print(f"Bid Volume: {volume['bid_volume']:.2f}")
-            print(f"Ask Volume: {volume['ask_volume']:.2f}")
-            print(f"Imbalance: {snapshot['market_state']['order_book_imbalance']:.4f}")
-            
-            # Entry prices
-            print("\n--- Suggested Entry Prices ---")
-            entry_prices = market_data.get_optimal_entry_levels(10)  # 10 USDC
-            for i, price in enumerate(entry_prices, 1):
-                print(f"Level {i}: {price:.2f} USDC")
-            
-            print("\nPress Ctrl+C to exit")
-            time.sleep(1)  # Update every second
-            
-    except KeyboardInterrupt:
-        print("\nStopping Market Data Service...")
+        # Wait for initial data collection
+        print("Waiting for initial data collection...")
+        await asyncio.sleep(5)
+        
+        # Get and print market snapshot
+        snapshot = await market_data.get_market_snapshot()
+        await print_market_data(snapshot)
+        
+    except Exception as e:
+        print(f"Error: {e}")
     finally:
-        market_data.stop()
-        print("Service stopped.")
+        # Cleanup
+        await market_data.stop()
+        print("\nService stopped.")
 
 if __name__ == "__main__":
-    main() 
+    # Run the async main function
+    asyncio.run(main()) 
