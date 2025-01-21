@@ -31,11 +31,29 @@ class SentimentAnalyzer:
     async def get_sentiment_data(self, symbol: str) -> Dict:
         """Get comprehensive sentiment analysis"""
         try:
-            return {
-                "social_sentiment": await self._get_social_sentiment(symbol),
-                "news_sentiment": await self._get_news_sentiment(symbol),
-                "market_mood": await self._get_fear_greed_index()
+            logger.info(f"Starting sentiment analysis for {symbol}...")
+            
+            # Get social sentiment
+            logger.info("Fetching social sentiment from Twitter...")
+            social = await self._get_social_sentiment(symbol)
+            
+            # Get news sentiment
+            logger.info("Fetching news sentiment...")
+            news = await self._get_news_sentiment(symbol)
+            
+            # Get market mood
+            logger.info("Fetching Fear & Greed Index...")
+            mood = await self._get_fear_greed_index()
+            
+            result = {
+                "social_sentiment": social,
+                "news_sentiment": news,
+                "market_mood": mood
             }
+            
+            logger.info("Sentiment analysis complete")
+            return result
+            
         except Exception as e:
             logger.error(f"Error getting sentiment data: {e}")
             return {}

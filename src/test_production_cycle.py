@@ -58,10 +58,25 @@ async def run_single_cycle():
         logger.info("Waiting for optimal BUY conditions...")
         while True:
             # Get market data
+            logger.info("Fetching market data...")
             market_snapshot = await market_data.get_market_snapshot()
+            logger.info(f"Current market price: {market_snapshot.get('price', 'N/A')} USDC")
+            
+            logger.info("Analyzing market sentiment...")
             sentiment_data = await sentiment.get_sentiment_data("TRUMP")
+            logger.info("Analyzing market correlations...")
             correlation_data = await correlation.get_correlation_data("TRUMPUSDC")
             
+            # Log analysis results
+            logger.info("\nMarket Analysis Summary:")
+            if sentiment_data.get('news_sentiment'):
+                logger.info(f"News Sentiment: {sentiment_data['news_sentiment'].get('sentiment_summary', {}).get('sentiment', 'N/A')}")
+            if sentiment_data.get('market_mood'):
+                logger.info(f"Market Mood: {sentiment_data['market_mood'].get('classification', 'N/A')} ({sentiment_data['market_mood'].get('value', 'N/A')})")
+            if correlation_data.get('btc_correlation'):
+                logger.info(f"BTC Correlation: {correlation_data['btc_correlation'].get('coefficient', 'N/A')}")
+            
+            logger.info("\nConsulting AI for BUY decision...")
             # Consult AI for BUY decision
             buy_decision = await state_manager.consult_ai(
                 "BUY",
@@ -71,9 +86,15 @@ async def run_single_cycle():
             )
             
             if buy_decision["confidence"] > 0.7:
-                logger.info(f"AI recommends BUY at {buy_decision['price']} with confidence {buy_decision['confidence']}")
+                logger.info(f"\nAI recommends BUY:")
+                logger.info(f"Price: {buy_decision['price']} USDC")
+                logger.info(f"Confidence: {buy_decision['confidence']}")
+                logger.info(f"Reasoning: {buy_decision['reasoning']}")
                 await state_manager.place_buy_order(buy_decision["price"], Decimal("0.25"))
                 break
+            else:
+                logger.info(f"\nAI confidence too low for BUY: {buy_decision['confidence']}")
+                logger.info("Waiting 60 seconds before next analysis...")
                 
             await asyncio.sleep(60)  # Check every minute
             
