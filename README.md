@@ -5,6 +5,13 @@ A sophisticated cryptocurrency trading system built for Binance, featuring real-
 
 ## Core Services
 
+### [Trading Engine](docs/TRADING_ENGINE.md)
+Core decision-making component that:
+- Coordinates all services
+- Generates trading signals
+- Manages risk and position sizing
+- Executes trades automatically
+
 ### [Market Data Service](docs/MARKET_DATA.md)
 Real-time market data and analysis including:
 - Price and volume tracking
@@ -51,17 +58,26 @@ NEWS_API_KEY=your_news_api_key
 ### Running Tests
 Verify service functionality:
 ```bash
-python src/test_apis.py      # Test API integrations
-python src/test_market_data.py    # Test market data service
-python src/test_state_manager.py  # Test trading state management
+python src/test_apis.py              # Test API integrations
+python src/test_market_data.py       # Test market data service
+python src/test_state_manager.py     # Test trading state management
+python src/test_trading_engine.py    # Test trading engine
 ```
 
 ## Architecture
-The system operates with several interconnected services:
-1. Market Data Service: Real-time data collection and analysis
-2. Sentiment Analyzer: Multi-source sentiment analysis
-3. Correlation Analyzer: Market relationship tracking
-4. State Manager: Trading state and position management
+The system operates with several interconnected services coordinated by the Trading Engine:
+
+1. Trading Engine (Core)
+   - Signal generation and execution
+   - Risk management
+   - Position sizing
+   - Service coordination
+
+2. Support Services
+   - Market Data Service: Real-time data collection and analysis
+   - Sentiment Analyzer: Multi-source sentiment analysis
+   - Correlation Analyzer: Market relationship tracking
+   - State Manager: Trading state and position management
 
 ## Contributing
 1. Fork the repository
