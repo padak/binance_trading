@@ -160,38 +160,51 @@ class StateManager:
         Consult DeepSeek via OpenRouter for trading decisions
         """
         if not self.openrouter_api_key:
+            logger.error("OpenRouter API key not found")
             return {}
             
         # Prepare the prompt with market data
         prompt = self._prepare_ai_prompt(market_data)
+        logger.info(f"Sending prompt to AI: {prompt}")
         
         try:
             async with aiohttp.ClientSession() as session:
+                headers = {
+                    "Authorization": f"Bearer {self.openrouter_api_key}",
+                    "HTTP-Referer": "https://github.com/padak/binance_trading",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "deepseek/deepseek-r1",
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+                logger.info(f"Request headers: {headers}")
+                logger.info(f"Request payload: {payload}")
+                
                 async with session.post(
                     "https://openrouter.ai/api/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.openrouter_api_key}",
-                        "HTTP-Referer": "https://github.com/padak/binance_trading",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": "deepseek-ai/deepseek-coder-33b-instruct",
-                        "messages": [{"role": "user", "content": prompt}]
-                    }
+                    headers=headers,
+                    json=payload
                 ) as response:
+                    response_text = await response.text()
+                    logger.info(f"Response status: {response.status}")
+                    logger.info(f"Response body: {response_text}")
+                    
                     if response.status == 200:
                         result = await response.json()
-                        return self._parse_ai_response(result)
+                        parsed_result = self._parse_ai_response(result)
+                        logger.info(f"Parsed AI response: {parsed_result}")
+                        return parsed_result
                     else:
-                        logger.error(f"AI consultation failed: {await response.text()}")
+                        logger.error(f"AI consultation failed: {response_text}")
                         return {}
                         
         except Exception as e:
-            logger.error(f"Error during AI consultation: {e}")
+            logger.error(f"Error during AI consultation: {str(e)}")
             return {}
     
     def _prepare_ai_prompt(self, market_data: Dict) -> str:
-        """Prepare prompt for AI consultation"""
+        """Prepare prompt for AI consultation with enhanced market context"""
         return f"""
         Analyze the following market data for {self.symbol} and suggest optimal buy/sell prices.
         Current state: {self.current_state.value}
@@ -199,11 +212,25 @@ class StateManager:
         Market Data:
         {json.dumps(market_data, indent=2)}
         
+        Historical Context:
+        - Price History (last 24h):
+          * High: {market_data.get('historical', {}).get('24h_high', 'N/A')}
+          * Low: {market_data.get('historical', {}).get('24h_low', 'N/A')}
+          * Volume: {market_data.get('historical', {}).get('24h_volume', 'N/A')}
+        - Recent Trades (last 100):
+          * Average Price: {market_data.get('historical', {}).get('avg_price', 'N/A')}
+          * Price Volatility: {market_data.get('historical', {}).get('volatility', 'N/A')}
+        - Market Sentiment:
+          * Buy/Sell Ratio: {market_data.get('sentiment', {}).get('buy_sell_ratio', 'N/A')}
+          * Large Orders (>1000 USDC): {market_data.get('sentiment', {}).get('large_orders', 'N/A')}
+        
         Consider:
-        1. Current price trends and volatility
-        2. Order book imbalance
-        3. Technical indicators
-        4. Trading fees (0.1% per trade)
+        1. Price trends and volatility patterns over the last 24 hours
+        2. Current order book depth and imbalance
+        3. Technical indicators (MA5, MA20, VWAP)
+        4. Market sentiment from recent large orders
+        5. Trading fees (0.1% per trade)
+        6. Historical support/resistance levels
         
         Respond in JSON format with:
         {{
@@ -211,7 +238,7 @@ class StateManager:
             "base_price": suggested base price,
             "price_range": [min_price, max_price],
             "confidence": 0.0 to 1.0,
-            "reasoning": "brief explanation"
+            "reasoning": "detailed explanation including historical context"
         }}
         """
     
@@ -219,6 +246,13 @@ class StateManager:
         """Parse and validate AI response"""
         try:
             content = response['choices'][0]['message']['content']
+            # Remove markdown code blocks if present
+            content = content.strip()
+            if content.startswith('```json'):
+                content = content[7:]  # Remove ```json
+            if content.endswith('```'):
+                content = content[:-3]  # Remove ```
+            content = content.strip()
             return json.loads(content)
         except Exception as e:
             logger.error(f"Error parsing AI response: {e}")

@@ -1,7 +1,30 @@
-python-binance>=1.0.19
-python-dotenv>=1.0.0
-tabulate>=0.9.0
-pandas>=2.0.0
-numpy>=1.24.0
-requests>=2.31.0
-websocket-client>=1.6.4 
+# Core dependencies
+python-binance==1.0.19
+python-dotenv==1.0.0
+aiohttp==3.9.1
+numpy==1.24.3
+pandas==2.1.4
+
+# Technical Analysis
+# ta-lib==0.4.28  # Uncomment after installing C library
+pandas-ta==0.3.14b  # Alternative to ta-lib
+
+# API Integrations
+tweepy==4.14.0  # Twitter API
+newsapi-python==0.2.7  # News API
+requests==2.31.0
+
+# Data Processing
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Utilities
+asyncio==3.4.3
+websockets==12.0
+json5==0.9.14
+
+# Optional - for development
+pytest==7.4.3
+pytest-asyncio==0.23.2
+black==23.12.1
+flake8==6.1.0 

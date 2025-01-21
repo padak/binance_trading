@@ -1,25 +1,21 @@
 #!/usr/bin/env python3
 import os
 import asyncio
+import time
 from dotenv import load_dotenv
 from decimal import Decimal
 from datetime import datetime
 from core.state_manager import StateManager, TradingState, Order
 from services.market_data import MarketDataService
 import json
+import logging
 
-async def main():
-    # Load environment variables
-    load_dotenv()
-    
-    # Initialize services
-    market_data = MarketDataService(symbol="TRUMPUSDC")
+# Set logging level to WARNING to reduce verbosity
+logging.getLogger().setLevel(logging.WARNING)
+
+async def run_test():
+    """Main test logic separated from WebSocket initialization"""
     state_manager = StateManager(symbol="TRUMPUSDC")
-    
-    # Start market data service
-    api_key = os.getenv('BINANCE_API_KEY')
-    api_secret = os.getenv('BINANCE_API_SECRET')
-    market_data.start(api_key=api_key, api_secret=api_secret)
     
     try:
         print("\nStarting State Manager Test...")
@@ -55,16 +51,36 @@ async def main():
         })
         print("Current State:", state_manager.current_state)
         
-        # Get market data and consult AI
+        # Create mock market data for AI consultation
+        mock_market_data = {
+            "market_state": {
+                "current_price": 40.25,
+                "order_book_imbalance": 0.05,
+                "volume_profile": {
+                    "bid_volume": 15000,
+                    "ask_volume": 14000
+                },
+                "technical_indicators": {
+                    "ma5": 40.15,
+                    "ma20": 39.95,
+                    "vwap": 40.10
+                }
+            },
+            "metadata": {
+                "symbol": "TRUMPUSDC",
+                "timestamp": datetime.now().isoformat()
+            }
+        }
+        
+        # Consult AI
         print("\nConsulting AI for sell price...")
-        market_snapshot = market_data.get_market_snapshot()
-        ai_advice = await state_manager.consult_ai(market_snapshot)
+        ai_advice = await state_manager.consult_ai(mock_market_data)
         print("\nAI Recommendation:")
         print(json.dumps(ai_advice, indent=2))
         
         # Simulate sell order
-        if ai_advice:
-            sell_price = Decimal(str(ai_advice.get('base_price', '41.00')))
+        if ai_advice and 'base_price' in ai_advice:
+            sell_price = Decimal(str(ai_advice['base_price']))
         else:
             sell_price = Decimal('41.00')  # Default 2.5% profit target
             
@@ -102,11 +118,17 @@ async def main():
             print(f"Profit/Loss: {last_trade.profit_loss} USDC")
             print(f"Status: {last_trade.status}")
         
-    except KeyboardInterrupt:
-        print("\nStopping test...")
-    finally:
-        market_data.stop()
-        print("Test completed.")
+    except Exception as e:
+        print(f"\nError during test: {e}")
+    
+    print("\nTest completed.")
+
+def main():
+    # Load environment variables
+    load_dotenv()
+    
+    # Run the async test
+    asyncio.run(run_test())
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    main() 
