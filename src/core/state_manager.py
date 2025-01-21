@@ -106,17 +106,21 @@ class StateManager:
             logger.error("Invalid order update received")
             return
             
+        # Check if this update is for our active order
         if self.active_order and str(self.active_order.id) == str(order_id):
+            logger.info(f"Received update for active order {order_id}: {new_status}")
+            
             if new_status == 'FILLED':
                 if self.current_state == TradingState.BUYING:
-                    # Buy order filled
+                    # Buy order filled - use quantity from active order
                     self.current_position = Position(
                         symbol=self.symbol,
-                        quantity=Decimal(order_update.get('quantity', '0')),
+                        quantity=self.active_order.quantity,  # Use quantity from active order
                         entry_price=Decimal(order_update.get('price', '0')),
                         timestamp=datetime.now()
                     )
                     await self.transition(TradingState.READY_TO_SELL)
+                    logger.info(f"Buy order filled at {self.current_position.entry_price}")
                     
                 elif self.current_state == TradingState.SELLING:
                     # Sell order filled - complete the trade
@@ -128,6 +132,7 @@ class StateManager:
                         
                     self.current_position = None
                     await self.transition(TradingState.READY_TO_BUY)
+                    logger.info("Sell order filled - Trade completed")
                     
             elif new_status in ['CANCELED', 'REJECTED', 'EXPIRED']:
                 # Order failed - revert to previous ready state
@@ -135,6 +140,19 @@ class StateManager:
                     await self.transition(TradingState.READY_TO_BUY)
                 elif self.current_state == TradingState.SELLING:
                     await self.transition(TradingState.READY_TO_SELL)
+        
+        # Also check trades list for any open trades that match this order ID
+        elif self.trades:
+            for trade in self.trades:
+                if trade.status == 'OPEN':
+                    if trade.sell_order and str(trade.sell_order.id) == str(order_id):
+                        logger.info(f"Received update for sell order {order_id}: {new_status}")
+                        if new_status == 'FILLED':
+                            trade.status = 'CLOSED'
+                            trade.profit_loss = self._calculate_profit_loss(trade)
+                            self.current_position = None
+                            await self.transition(TradingState.READY_TO_BUY)
+                            logger.info("Sell order filled - Trade completed")
     
     def record_trade(self, buy_order: Order) -> None:
         """Record a new trade when buy order is placed"""
@@ -261,18 +279,17 @@ Return ONLY a JSON object in this exact format:
         except Exception as e:
             logger.error(f"Error updating balance: {e}")
             
-    async def place_buy_order(self, price: Decimal, quantity: Decimal, 
-                            stop_loss: Decimal, take_profit: Decimal) -> None:
+    async def place_buy_order(self, price: Decimal, quantity: Decimal) -> None:
         """Place a buy order with safety checks"""
         try:
             # Verify balance first
             available_balance = await self.get_available_balance()
-            required_amount = price * quantity
+            required_amount = float(price) * float(quantity)  # Convert to float for calculation
             
-            if available_balance < required_amount:
+            if available_balance < Decimal(str(required_amount)):
                 raise ValueError(f"Insufficient USDC balance. Required: {required_amount}, Available: {available_balance}")
             
-            # Place the order
+            # Place the order - convert Decimal to string for Binance API
             order = await self.client.create_order(
                 symbol=self.symbol,
                 side='BUY',
@@ -282,16 +299,74 @@ Return ONLY a JSON object in this exact format:
                 price=str(price)
             )
             
-            # Record the order and update state
-            await self.handle_order_update({
-                'orderId': order['orderId'],
-                'status': 'NEW',
-                'price': str(price),
-                'quantity': str(quantity)
-            })
+            # Create Order object
+            buy_order = Order(
+                id=str(order['orderId']),
+                symbol=self.symbol,
+                side='BUY',
+                quantity=quantity,
+                price=price,
+                status=order['status'],
+                timestamp=datetime.now()
+            )
+            
+            # Record the trade
+            self.record_trade(buy_order)
+            
+            # Update state
+            await self.transition(TradingState.BUYING, buy_order)
             
             logger.info(f"Buy order placed - Price: {price} USDC, Quantity: {quantity}")
             
+            return order  # Return the order details
+            
         except Exception as e:
             logger.error(f"Error placing buy order: {e}")
+            raise 
+
+    async def place_sell_order(self, price: Decimal, quantity: Decimal) -> None:
+        """Place a sell order with safety checks"""
+        try:
+            # Debug logging
+            logger.info(f"Attempting to sell - Original quantity: {quantity}")
+            
+            # Format quantity to 3 decimal places for TRUMPUSDC
+            formatted_quantity = quantity.quantize(Decimal('0.001'))
+            logger.info(f"Formatted quantity: {formatted_quantity}")
+            
+            # Verify we have enough to sell
+            if not self.current_position:
+                raise ValueError("No position to sell")
+            logger.info(f"Current position quantity: {self.current_position.quantity}")
+            
+            # Place the order - convert Decimal to string for Binance API
+            order = await self.client.create_order(
+                symbol=self.symbol,
+                side='SELL',
+                type='LIMIT',
+                timeInForce='GTC',
+                quantity=str(formatted_quantity),
+                price=str(price)
+            )
+            
+            # Create Order object
+            sell_order = Order(
+                id=str(order['orderId']),
+                symbol=self.symbol,
+                side='SELL',
+                quantity=formatted_quantity,
+                price=price,
+                status=order['status'],
+                timestamp=datetime.now()
+            )
+            
+            # Update state
+            await self.transition(TradingState.SELLING, sell_order)
+            
+            logger.info(f"Sell order placed - Price: {price} USDC, Quantity: {formatted_quantity}")
+            
+            return order  # Return the order details
+            
+        except Exception as e:
+            logger.error(f"Error placing sell order: {e}")
             raise 

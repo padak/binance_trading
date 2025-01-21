@@ -212,3 +212,16 @@ def implement_websocket():
   2. Add technical indicators (RSI, MA, MACD) to market data
   3. Include historical price data for better context
   4. Add bid/ask volumes and order book depth 
+
+## Price Monitoring Strategy
+- While waiting for SELL order to fill, monitor current market price
+- If price drops significantly below our last BUY price:
+  - Consider canceling the SELL order
+  - Place a new BUY order to average down the position
+  - Update the SELL target based on the new average entry price
+- Considerations:
+  - Need to define what constitutes a "significant" price drop
+  - Need to manage risk by limiting the total position size
+  - Should consult AI about whether averaging down makes sense given market conditions
+  - Need to track multiple entry prices and calculate weighted average
+  - Consider implementing a maximum number of averaging attempts 

@@ -144,149 +144,293 @@ class MarketDataService:
             self.client = await AsyncClient.create(api_key=api_key, api_secret=api_secret)
             self.bsm = BinanceSocketManager(self.client)
             
-            # Get initial price before starting WebSocket
-            try:
-                ticker = await self.client.get_symbol_ticker(symbol=self.symbol)
-                self.last_price = float(ticker['price'])
-                logger.info(f"Initial price fetched: {self.last_price}")
-                
-                # Get initial 24h volume
-                ticker_24h = await self.client.get_ticker(symbol=self.symbol)
-                self.volume_24h = float(ticker_24h['volume'])
-                logger.info(f"Initial 24h volume fetched: {self.volume_24h}")
-                
-                # Get initial order book snapshot
-                logger.info("Fetching initial order book...")
-                depth = await self.client.get_order_book(symbol=self.symbol)
-                for bid in depth['bids']:
-                    self.order_book.update('BUY', float(bid[0]), float(bid[1]))
-                for ask in depth['asks']:
-                    self.order_book.update('SELL', float(ask[0]), float(ask[1]))
-                logger.info(f"Initial order book loaded with {len(depth['bids'])} bids and {len(depth['asks'])} asks")
-                
-                # Fetch historical candles
-                logger.info("Fetching historical candles...")
-                historical_candles = await self.get_price_history(interval='5m', limit=288)  # Last 24 hours
-                self.candles.extend(historical_candles)
-                logger.info(f"Loaded {len(historical_candles)} historical candles")
-                
-                # Update indicators with historical data
-                self._update_indicators()
-                logger.info("Technical indicators initialized with historical data")
-                
-            except Exception as e:
-                logger.error(f"Error fetching initial data: {e}")
+            # Get initial data
+            await self._initialize_data()
             
-            # Start trade socket
-            logger.info("Starting ticker WebSocket...")
-            ts = self.bsm.symbol_ticker_socket(self.symbol)
-            self.socket_tasks.append(asyncio.create_task(self._handle_socket(ts, self._handle_ticker)))
-            
-            # Start trade socket for volume tracking
-            logger.info("Starting trades WebSocket...")
-            trades_socket = self.bsm.trade_socket(self.symbol)
-            self.socket_tasks.append(asyncio.create_task(self._handle_socket(trades_socket, self._handle_trades)))
-            
-            # Start order book socket
-            logger.info("Starting depth WebSocket...")
-            depth_socket = self.bsm.depth_socket(self.symbol)
-            self.socket_tasks.append(asyncio.create_task(self._handle_socket(depth_socket, self._handle_depth)))
-            
-            # Start candle manager
-            logger.info("Starting candle manager...")
-            self.socket_tasks.append(asyncio.create_task(self._candle_manager()))
+            # Start WebSocket connections
+            await self._start_websockets()
             
             logger.info("Market data service initialized successfully")
-            
         except Exception as e:
             logger.error(f"Error starting market data service: {e}")
             raise
-        
+    
+    async def _initialize_data(self):
+        """Initialize market data"""
+        try:
+            # Get initial price
+            ticker = await self.client.get_symbol_ticker(symbol=self.symbol)
+            self.last_price = float(ticker['price'])
+            logger.info(f"Initial price fetched: {self.last_price}")
+            
+            # Get initial 24h volume
+            ticker_24h = await self.client.get_ticker(symbol=self.symbol)
+            self.volume_24h = float(ticker_24h['volume'])
+            logger.info(f"Initial 24h volume fetched: {self.volume_24h}")
+            
+            # Get initial order book
+            depth = await self.client.get_order_book(symbol=self.symbol)
+            for bid in depth['bids']:
+                self.order_book.update('BUY', float(bid[0]), float(bid[1]))
+            for ask in depth['asks']:
+                self.order_book.update('SELL', float(ask[0]), float(ask[1]))
+            logger.info(f"Initial order book loaded with {len(depth['bids'])} bids and {len(depth['asks'])} asks")
+            
+            # Get historical candles
+            historical_candles = await self.get_price_history(interval='5m', limit=288)
+            self.candles.extend(historical_candles)
+            logger.info(f"Loaded {len(historical_candles)} historical candles")
+            
+            # Update indicators
+            self._update_indicators()
+            logger.info("Technical indicators initialized")
+        except Exception as e:
+            logger.error(f"Error initializing market data: {e}")
+            raise
+    
+    async def _start_websockets(self):
+        """Start WebSocket connections"""
+        try:
+            # Start ticker socket
+            ts = self.bsm.symbol_ticker_socket(self.symbol)
+            self.socket_tasks.append(asyncio.create_task(self._handle_socket(ts, self._handle_ticker)))
+            logger.info("Started ticker WebSocket")
+            
+            # Start trades socket
+            trades_socket = self.bsm.trade_socket(self.symbol)
+            self.socket_tasks.append(asyncio.create_task(self._handle_socket(trades_socket, self._handle_trades)))
+            logger.info("Started trades WebSocket")
+            
+            # Start depth socket
+            depth_socket = self.bsm.depth_socket(self.symbol)
+            self.socket_tasks.append(asyncio.create_task(self._handle_socket(depth_socket, self._handle_depth)))
+            logger.info("Started depth WebSocket")
+            
+            # Start candle manager
+            self.socket_tasks.append(asyncio.create_task(self._candle_manager()))
+            logger.info("Started candle manager")
+        except Exception as e:
+            logger.error(f"Error starting WebSockets: {e}")
+            raise
+    
     async def stop(self):
         """Stop market data collection"""
-        # Cancel all socket tasks
-        for task in self.socket_tasks:
-            task.cancel()
-        self.socket_tasks.clear()
-        
-        # Close the client
-        if self.client:
-            await self.client.close_connection()
-            self.client = None
+        try:
+            # Cancel all socket tasks
+            for task in self.socket_tasks:
+                task.cancel()
+            self.socket_tasks.clear()
             
-        logger.info("Stopped market data collection")
-        
+            # Close the client
+            if self.client:
+                await self.client.close_connection()
+                self.client = None
+            
+            logger.info("Stopped market data collection")
+        except Exception as e:
+            logger.error(f"Error stopping market data service: {e}")
+            raise
+    
     async def _handle_socket(self, socket, handler):
         """Generic socket message handler"""
-        async with socket as ts:
-            logger.info(f"WebSocket connected: {handler.__name__}")
-            while True:
-                try:
-                    msg = await ts.recv()
-                    logger.debug(f"Received WebSocket message: {msg.get('e')} for {handler.__name__}")
-                    await handler(msg)
-                except Exception as e:
-                    logger.error(f"Socket error in {handler.__name__}: {e}")
-                    break
-            logger.warning(f"WebSocket disconnected: {handler.__name__}")
-        
+        try:
+            async with socket as ts:
+                logger.info(f"WebSocket connected: {handler.__name__}")
+                while True:
+                    try:
+                        msg = await ts.recv()
+                        await handler(msg)
+                    except Exception as e:
+                        logger.error(f"Socket error in {handler.__name__}: {e}")
+                        break
+                logger.warning(f"WebSocket disconnected: {handler.__name__}")
+        except Exception as e:
+            logger.error(f"Error in socket handler: {e}")
+            raise
+    
     async def _handle_ticker(self, msg: dict):
         """Process ticker updates"""
         try:
             if msg.get('e') == 'error':
                 logger.error(f"WebSocket error in ticker: {msg.get('m')}")
                 return
-                
-            price = float(msg.get('c', 0))  # Close price
+            
+            price = float(msg.get('c', 0))
             if price > 0:
-                logger.debug(f"Received price update: {price}")
                 self.last_price = price
                 self._update_indicators()
-                logger.debug(f"Updated indicators - MA5: {self.ma5}, MA20: {self.ma20}")
             else:
                 logger.warning(f"Received invalid price: {msg}")
-                
         except Exception as e:
-            logger.error(f"Error processing ticker: {e}, Message: {msg}")
-            
+            logger.error(f"Error processing ticker: {e}")
+    
     async def _handle_depth(self, msg: dict):
         """Process order book updates"""
         try:
             if msg.get('e') == 'error':
                 logger.error(f"WebSocket error in depth: {msg.get('m')}")
                 return
-                
-            # For depth update
-            if msg.get('e') == 'depthUpdate':
-                # Update bids
-                for bid in msg.get('b', []):  # b = bids
-                    price = float(bid[0])
-                    quantity = float(bid[1])
-                    self.order_book.update('BUY', price, quantity)
-                    
-                # Update asks
-                for ask in msg.get('a', []):  # a = asks
-                    price = float(ask[0])
-                    quantity = float(ask[1])
-                    self.order_book.update('SELL', price, quantity)
-                    
-                logger.debug(f"Order book updated - Bids: {len(self.order_book.bids)}, "
-                           f"Asks: {len(self.order_book.asks)}, "
-                           f"Imbalance: {self.order_book.get_imbalance():.2f}")
-                
-        except Exception as e:
-            logger.error(f"Error processing depth: {e}, Message: {msg}")
             
+            if msg.get('e') == 'depthUpdate':
+                for bid in msg.get('b', []):
+                    self.order_book.update('BUY', float(bid[0]), float(bid[1]))
+                for ask in msg.get('a', []):
+                    self.order_book.update('SELL', float(ask[0]), float(ask[1]))
+        except Exception as e:
+            logger.error(f"Error processing depth: {e}")
+    
+    async def _handle_trades(self, msg: dict):
+        """Process trade updates"""
+        try:
+            if msg.get('e') == 'error':
+                logger.error(f"WebSocket error in trades: {msg.get('m')}")
+                return
+            
+            if msg.get('e') == 'trade':
+                self.trades.append(msg)
+                
+                if self.current_candle:
+                    price = float(msg.get('p', 0))
+                    volume = float(msg.get('q', 0))
+                    
+                    self.current_candle.high = max(self.current_candle.high, price)
+                    self.current_candle.low = min(self.current_candle.low, price)
+                    self.current_candle.close = price
+                    self.current_candle.volume += volume
+                    self.current_candle.trades += 1
+        except Exception as e:
+            logger.error(f"Error processing trade: {e}")
+    
     def _update_indicators(self):
         """Update technical indicators"""
-        if len(self.candles) >= 5:
-            closes = [c.close for c in list(self.candles)[-5:]]
-            self.ma5 = sum(closes) / 5
+        try:
+            if len(self.candles) >= 5:
+                closes = [c.close for c in list(self.candles)[-5:]]
+                self.ma5 = sum(closes) / 5
             
-        if len(self.candles) >= 20:
-            closes = [c.close for c in list(self.candles)[-20:]]
-            self.ma20 = sum(closes) / 20
+            if len(self.candles) >= 20:
+                closes = [c.close for c in list(self.candles)[-20:]]
+                self.ma20 = sum(closes) / 20
+        except Exception as e:
+            logger.error(f"Error updating indicators: {e}")
+    
+    async def _candle_manager(self):
+        """Manages candle creation and updates"""
+        try:
+            while True:
+                now = datetime.now()
+                interval_minutes = 5
+                minutes_to_next = interval_minutes - (now.minute % interval_minutes)
+                seconds_to_next = minutes_to_next * 60 - now.second
+                
+                await asyncio.sleep(seconds_to_next)
+                
+                if self.last_price:
+                    self.current_candle = Candle(
+                        timestamp=datetime.now(),
+                        open=self.last_price,
+                        high=self.last_price,
+                        low=self.last_price,
+                        close=self.last_price,
+                        volume=0.0,
+                        trades=0
+                    )
+                    
+                    await asyncio.sleep(interval_minutes * 60)
+                    
+                    if self.current_candle:
+                        self.candles.append(self.current_candle)
+                        self._update_indicators()
+                        self.current_candle = None
+        except asyncio.CancelledError:
+            logger.info("Candle manager stopped")
+        except Exception as e:
+            logger.error(f"Error in candle manager: {e}")
+            raise
+    
+    async def get_market_snapshot(self, max_retries: int = 3, retry_delay: float = 2.0) -> Dict:
+        """Get current market snapshot"""
+        for attempt in range(max_retries):
+            try:
+                if self.last_price is None:
+                    ticker = await self.client.get_symbol_ticker(symbol=self.symbol)
+                    self.last_price = float(ticker['price'])
+                
+                liquidity = self.order_book.get_liquidity_metrics()
+                
+                if not hasattr(self, 'volume_24h') or self.volume_24h == 0:
+                    ticker_24h = await self.client.get_ticker(symbol=self.symbol)
+                    self.volume_24h = float(ticker_24h['volume'])
+                
+                price_history = []
+                if self.candles:
+                    for candle in list(self.candles)[-12:]:
+                        price_history.append({
+                            'timestamp': int(candle.timestamp.timestamp() * 1000),
+                            'open': candle.open,
+                            'high': candle.high,
+                            'low': candle.low,
+                            'close': candle.close,
+                            'volume': candle.volume,
+                            'trades': candle.trades,
+                            'vwap': candle.vwap
+                        })
+                
+                snapshot = {
+                    'price': self.last_price,
+                    'volume': self.volume_24h,
+                    'best_bid': max(self.order_book.bids.keys()) if self.order_book.bids else None,
+                    'best_ask': min(self.order_book.asks.keys()) if self.order_book.asks else None,
+                    'bid_volume': self.order_book.bid_volume,
+                    'ask_volume': self.order_book.ask_volume,
+                    'ma5': self.ma5,
+                    'ma20': self.ma20,
+                    'vwap': self.vwap,
+                    'spread': liquidity['spread'],
+                    'bid_depth': liquidity['bid_depth'],
+                    'ask_depth': liquidity['ask_depth'],
+                    'cancel_rate': liquidity['cancel_rate'],
+                    'price_history': price_history
+                }
+                
+                if snapshot['price'] is None or snapshot['price'] == 0:
+                    raise ValueError("Invalid price in snapshot")
+                
+                return snapshot
             
+            except Exception as e:
+                logger.warning(f"Failed to get market snapshot (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                else:
+                    raise
+    
+    async def get_price_history(self, interval: str = '5m', limit: int = 288) -> List[Candle]:
+        """Get historical price data"""
+        try:
+            klines = await self.client.get_klines(
+                symbol=self.symbol,
+                interval=interval,
+                limit=limit
+            )
+            
+            return [
+                Candle(
+                    timestamp=datetime.fromtimestamp(kline[0] / 1000),
+                    open=float(kline[1]),
+                    high=float(kline[2]),
+                    low=float(kline[3]),
+                    close=float(kline[4]),
+                    volume=float(kline[5]),
+                    trades=int(kline[8]),
+                    vwap=float(kline[7]) if len(kline) > 7 else None
+                )
+                for kline in klines
+            ]
+        except Exception as e:
+            logger.error(f"Error fetching price history: {e}")
+            return []
+
     def calculate_rsi(self) -> float:
         """Calculate Relative Strength Index"""
         if len(self.rsi_values) < self.rsi_period:
@@ -408,187 +552,6 @@ class MarketDataService:
             "volume_factor": volume_factor
         }
 
-    async def get_market_snapshot(self, max_retries: int = 3, retry_delay: float = 2.0) -> Dict:
-        """
-        Get current market snapshot with validation and retries
-        
-        Args:
-            max_retries: Maximum number of retries to get valid data
-            retry_delay: Delay between retries in seconds
-            
-        Returns:
-            Dict containing market data
-        """
-        for attempt in range(max_retries):
-            try:
-                # If we don't have a price yet, try to fetch it
-                if self.last_price is None:
-                    logger.warning("No price available, fetching from API...")
-                    ticker = await self.client.get_symbol_ticker(symbol=self.symbol)
-                    self.last_price = float(ticker['price'])
-                    
-                # Get order book metrics
-                liquidity = self.order_book.get_liquidity_metrics()
-                
-                # Get 24h volume if we don't have it
-                if not hasattr(self, 'volume_24h') or self.volume_24h == 0:
-                    ticker_24h = await self.client.get_ticker(symbol=self.symbol)
-                    self.volume_24h = float(ticker_24h['volume'])
-                
-                # Convert candles to dict format for the snapshot
-                price_history = []
-                if self.candles:
-                    for candle in list(self.candles)[-12:]:  # Last hour of data (12 x 5min candles)
-                        price_history.append({
-                            'timestamp': int(candle.timestamp.timestamp() * 1000),
-                            'open': candle.open,
-                            'high': candle.high,
-                            'low': candle.low,
-                            'close': candle.close,
-                            'volume': candle.volume,
-                            'trades': candle.trades,
-                            'vwap': candle.vwap if candle.vwap else None
-                        })
-                    logger.debug(f"Added {len(price_history)} candles to market snapshot")
-                    
-                    # Calculate price movement metrics
-                    if len(price_history) >= 2:
-                        first_candle = price_history[0]
-                        last_candle = price_history[-1]
-                        total_change = ((last_candle['close'] - first_candle['close']) / first_candle['close']) * 100
-                        high = max(c['high'] for c in price_history)
-                        low = min(c['low'] for c in price_history)
-                        logger.debug(f"Price movement: {total_change:.2f}% (High: {high:.2f}, Low: {low:.2f})")
-                
-                snapshot = {
-                    'price': self.last_price,
-                    'volume': self.volume_24h,  # Use 24h volume instead of trade collection
-                    'best_bid': max(self.order_book.bids.keys()) if self.order_book.bids else None,
-                    'best_ask': min(self.order_book.asks.keys()) if self.order_book.asks else None,
-                    'bid_volume': self.order_book.bid_volume,
-                    'ask_volume': self.order_book.ask_volume,
-                    'ma5': self.ma5,
-                    'ma20': self.ma20,
-                    'vwap': self.vwap,
-                    'spread': liquidity['spread'],
-                    'bid_depth': liquidity['bid_depth'],
-                    'ask_depth': liquidity['ask_depth'],
-                    'cancel_rate': liquidity['cancel_rate'],
-                    'price_history': price_history
-                }
-                
-                # Validate core data
-                if snapshot['price'] is None or snapshot['price'] == 0:
-                    raise ValueError("Invalid price in snapshot")
-                if snapshot['volume'] is None or snapshot['volume'] == 0:
-                    raise ValueError("Invalid volume in snapshot")
-                    
-                logger.info(f"Market snapshot generated successfully on attempt {attempt + 1}")
-                return snapshot
-                
-            except Exception as e:
-                logger.warning(f"Failed to get market snapshot (attempt {attempt + 1}/{max_retries}): {e}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(retry_delay)
-                else:
-                    logger.error("Failed to get valid market snapshot after all retries")
-                    raise
-
-    async def _get_historical_data(self) -> Dict:
-        """Collect historical price and trade data"""
-        try:
-            # Get 24h ticker data
-            ticker = await self.client.get_ticker(symbol=self.symbol)
-            
-            # Get recent trades
-            trades = await self.client.get_recent_trades(symbol=self.symbol, limit=100)
-            
-            # Calculate metrics
-            prices = [float(trade['price']) for trade in trades]
-            avg_price = sum(prices) / len(prices)
-            volatility = statistics.stdev(prices) if len(prices) > 1 else 0
-            
-            return {
-                "24h_high": float(ticker['highPrice']),
-                "24h_low": float(ticker['lowPrice']),
-                "24h_volume": float(ticker['volume']),
-                "avg_price": avg_price,
-                "volatility": volatility
-            }
-        except Exception as e:
-            logger.error(f"Error getting historical data: {e}")
-            return {}
-
-    async def _get_market_sentiment(self) -> Dict:
-        """Analyze market sentiment from recent trades and orders"""
-        try:
-            trades = await self.client.get_recent_trades(symbol=self.symbol, limit=500)
-            
-            # Calculate buy/sell ratio
-            buys = sum(1 for trade in trades if trade['isBuyerMaker'])
-            sells = len(trades) - buys
-            buy_sell_ratio = buys / sells if sells > 0 else 1
-            
-            # Count large orders
-            large_orders = sum(1 for trade in trades 
-                             if float(trade['quoteQty']) > 1000)  # Orders > 1000 USDC
-            
-            return {
-                "buy_sell_ratio": round(buy_sell_ratio, 2),
-                "large_orders": large_orders
-            }
-        except Exception as e:
-            logger.error(f"Error getting market sentiment: {e}")
-            return {}
-        
-    def get_optimal_entry_levels(self, usdc_amount: float) -> List[float]:
-        """
-        Calculate optimal entry price levels for a given USDC amount
-        
-        Args:
-            usdc_amount: Amount of USDC to trade
-            
-        Returns:
-            List of suggested entry prices
-        """
-        if not self.last_price:
-            return []
-            
-        # Get order book imbalance
-        imbalance = self.order_book.get_imbalance()
-        
-        # Base price adjustment on imbalance
-        base_adjustment = -0.002 if imbalance > 0 else -0.004  # More conservative when selling pressure
-        
-        # Calculate entry levels (multiple levels for better fill probability)
-        levels = []
-        for i in range(3):  # 3 price levels
-            adjustment = base_adjustment * (1 + i * 0.5)  # Increase adjustment for each level
-            price = self.last_price * (1 + adjustment)
-            levels.append(round(price, 2))
-            
-        return sorted(levels)  # Sort from lowest to highest price
-
-    def detect_abnormal_volume(self) -> bool:
-        """Detect abnormal volume (>5x 30-day average)"""
-        if len(self.candles) < 30:
-            return False
-        avg_volume = sum(c.volume for c in list(self.candles)[-30:]) / 30
-        current_volume = self.candles[-1].volume if self.candles else 0
-        return current_volume > (avg_volume * 5)
-        
-    def detect_price_volume_divergence(self) -> bool:
-        """Detect price-volume divergence"""
-        if len(self.candles) < 5:
-            return False
-            
-        recent_candles = list(self.candles)[-5:]
-        price_trend = recent_candles[-1].close - recent_candles[0].close
-        volume_trend = recent_candles[-1].volume - recent_candles[0].volume
-        
-        # Divergence: price up, volume down or vice versa
-        return (price_trend > 0 and volume_trend < 0) or (price_trend < 0 and volume_trend > 0) 
-
     async def _get_futures_data(self) -> Dict:
         """Collect futures market data"""
         try:
@@ -670,130 +633,22 @@ class MarketDataService:
         return sum(1 for trade in self.trades 
                   if float(trade.get('quoteQty', 0)) > 1000) 
 
-    async def get_price_history(self, interval: str = '5m', limit: int = 288) -> List[Candle]:
-        """
-        Get historical price data
+    def detect_abnormal_volume(self) -> bool:
+        """Detect abnormal volume (>5x 30-day average)"""
+        if len(self.candles) < 30:
+            return False
+        avg_volume = sum(c.volume for c in list(self.candles)[-30:]) / 30
+        current_volume = self.candles[-1].volume if self.candles else 0
+        return current_volume > (avg_volume * 5)
         
-        Args:
-            interval: Kline interval (e.g., '5m', '15m', '1h')
-            limit: Number of candles to fetch
+    def detect_price_volume_divergence(self) -> bool:
+        """Detect price-volume divergence"""
+        if len(self.candles) < 5:
+            return False
             
-        Returns:
-            List of Candle objects
-        """
-        try:
-            klines = await self.client.get_klines(
-                symbol=self.symbol,
-                interval=interval,
-                limit=limit
-            )
-            
-            return [
-                Candle(
-                    timestamp=datetime.fromtimestamp(kline[0] / 1000),
-                    open=float(kline[1]),
-                    high=float(kline[2]),
-                    low=float(kline[3]),
-                    close=float(kline[4]),
-                    volume=float(kline[5]),
-                    trades=int(kline[8]),
-                    vwap=float(kline[7]) if len(kline) > 7 else None
-                )
-                for kline in klines
-            ]
-        except Exception as e:
-            logger.error(f"Error fetching price history: {e}")
-            return [] 
-
-    async def _handle_trade(self, msg: dict):
-        """Process trade updates"""
-        try:
-            if msg.get('e') == 'error':
-                logger.error(f"WebSocket error in trades: {msg.get('m')}")
-                return
-                
-            # Add trade to our collection
-            if msg.get('q'):  # quantity
-                self.trades.append(float(msg['q']))
-                logger.debug(f"Recorded trade of {msg['q']} {self.symbol}")
-                
-        except Exception as e:
-            logger.error(f"Error processing trade: {e}, Message: {msg}")
-
-    async def _handle_trades(self, msg: dict):
-        """Process trade updates"""
-        try:
-            if msg.get('e') == 'error':
-                logger.error(f"WebSocket error in trades: {msg.get('m')}")
-                return
-                
-            # Add trade to our collection
-            self.trades.append(msg)
-            
-            # Update current candle if we have one
-            if self.current_candle:
-                price = float(msg.get('p', 0))  # Price
-                volume = float(msg.get('q', 0))  # Quantity
-                
-                self.current_candle.high = max(self.current_candle.high, price)
-                self.current_candle.low = min(self.current_candle.low, price)
-                self.current_candle.close = price
-                self.current_candle.volume += volume
-                self.current_candle.trades += 1
-                
-                # Update VWAP
-                if volume > 0:
-                    if not self.current_candle.vwap:
-                        self.current_candle.vwap = price
-                    else:
-                        self.current_candle.vwap = (
-                            (self.current_candle.vwap * (self.current_candle.volume - volume) + 
-                             price * volume) / self.current_candle.volume
-                        )
-            
-            logger.debug(f"Processed trade: Price={msg.get('p')}, Quantity={msg.get('q')}")
-            
-        except Exception as e:
-            logger.error(f"Error processing trade: {e}, Message: {msg}") 
-
-    async def _candle_manager(self):
-        """Manages candle creation and updates at regular intervals"""
-        try:
-            while True:
-                now = datetime.now()
-                # Round down to nearest 5 minute interval
-                interval_minutes = 5
-                minutes_to_next = interval_minutes - (now.minute % interval_minutes)
-                seconds_to_next = minutes_to_next * 60 - now.second
-                
-                # Wait until next interval
-                await asyncio.sleep(seconds_to_next)
-                
-                # Create new candle
-                if self.last_price:
-                    self.current_candle = Candle(
-                        timestamp=datetime.now(),
-                        open=self.last_price,
-                        high=self.last_price,
-                        low=self.last_price,
-                        close=self.last_price,
-                        volume=0.0,
-                        trades=0
-                    )
-                    
-                    # Wait for the interval duration
-                    await asyncio.sleep(interval_minutes * 60)
-                    
-                    # Add completed candle to history
-                    if self.current_candle:
-                        self.candles.append(self.current_candle)
-                        self._update_indicators()
-                        logger.debug(f"New candle created: O={self.current_candle.open:.2f}, "
-                                   f"H={self.current_candle.high:.2f}, L={self.current_candle.low:.2f}, "
-                                   f"C={self.current_candle.close:.2f}, V={self.current_candle.volume:.2f}")
-                        self.current_candle = None
-                    
-        except asyncio.CancelledError:
-            logger.info("Candle manager stopped")
-        except Exception as e:
-            logger.error(f"Error in candle manager: {e}") 
+        recent_candles = list(self.candles)[-5:]
+        price_trend = recent_candles[-1].close - recent_candles[0].close
+        volume_trend = recent_candles[-1].volume - recent_candles[0].volume
+        
+        # Divergence: price up, volume down or vice versa
+        return (price_trend > 0 and volume_trend < 0) or (price_trend < 0 and volume_trend > 0) 

@@ -52,35 +52,34 @@ async def run_test():
         print("Current State:", state_manager.current_state)
         
         # Create mock market data for AI consultation
+        print("\nConsulting AI for sell price...")
         mock_market_data = {
-            "market_state": {
-                "current_price": 40.25,
-                "order_book_imbalance": 0.05,
-                "volume_profile": {
-                    "bid_volume": 15000,
-                    "ask_volume": 14000
-                },
-                "technical_indicators": {
-                    "ma5": 40.15,
-                    "ma20": 39.95,
-                    "vwap": 40.10
-                }
-            },
-            "metadata": {
-                "symbol": "TRUMPUSDC",
-                "timestamp": datetime.now().isoformat()
-            }
+            'price': 40.25,
+            'volume': 1000000,
+            'best_bid': 40.20,
+            'best_ask': 40.30,
+            'ma5': 40.15,
+            'ma20': 39.95
+        }
+        
+        mock_correlation_data = {
+            'btc_correlation': 0.8
         }
         
         # Consult AI
-        print("\nConsulting AI for sell price...")
-        ai_advice = await state_manager.consult_ai(mock_market_data)
+        ai_advice = await state_manager.consult_ai(
+            "SELL",
+            mock_market_data,
+            None,  # Skip sentiment data
+            mock_correlation_data
+        )
+        
         print("\nAI Recommendation:")
         print(json.dumps(ai_advice, indent=2))
         
         # Simulate sell order
-        if ai_advice and 'base_price' in ai_advice:
-            sell_price = Decimal(str(ai_advice['base_price']))
+        if ai_advice and ai_advice.get('price', 0) > 0:
+            sell_price = Decimal(str(ai_advice['price']))
         else:
             sell_price = Decimal('41.00')  # Default 2.5% profit target
             
@@ -117,11 +116,11 @@ async def run_test():
             print(f"Sell Price: {last_trade.sell_order.price}")
             print(f"Profit/Loss: {last_trade.profit_loss} USDC")
             print(f"Status: {last_trade.status}")
-        
+            
     except Exception as e:
-        print(f"\nError during test: {e}")
-    
-    print("\nTest completed.")
+        print("\nError during test:", e)
+    finally:
+        print("\nTest completed.")
 
 def main():
     # Load environment variables

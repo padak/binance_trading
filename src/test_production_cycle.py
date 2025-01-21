@@ -28,7 +28,7 @@ import aiohttp
 from services.market_data import MarketDataService
 from services.sentiment_analyzer import SentimentAnalyzer
 from services.correlation_analyzer import CorrelationAnalyzer
-from core.state_manager import StateManager
+from core.state_manager import StateManager, TradingState
 
 # Load environment variables from .env file
 load_dotenv()
@@ -189,6 +189,10 @@ def analyze_market_patterns(market_snapshot):
 
 async def run_single_cycle(dry_run=False):
     """Run a single trading cycle with proper cleanup"""
+    client = None
+    market_data = None
+    state_manager = None
+    
     try:
         async with managed_resources() as session:
             # Initialize services
@@ -200,7 +204,6 @@ async def run_single_cycle(dry_run=False):
             
             client = await AsyncClient.create(api_key, api_secret)
             market_data = MarketDataService("TRUMPUSDC")
-            sentiment = SentimentAnalyzer(client)
             correlation = CorrelationAnalyzer(client)
             state_manager = StateManager("TRUMPUSDC")
             
@@ -214,161 +217,173 @@ async def run_single_cycle(dry_run=False):
             await asyncio.sleep(5)  # Wait for WebSockets to connect and receive initial data
             
             logger.info("Analyzing market conditions...")
-            try:
-                while True:
-                    # Get market data
-                    market_snapshot = await market_data.get_market_snapshot(max_retries=3, retry_delay=2.0)
-                    
-                    if not market_snapshot.get('price'):
-                        logger.warning("Failed to get valid market price, waiting 60 seconds...")
-                        await asyncio.sleep(60)
-                        continue
-                    
-                    # Print market analysis
-                    logger.info("\nMarket Analysis:")
-                    logger.info(f"Current Price: {market_snapshot['price']} USDC")
-                    
-                    # Analyze market patterns
-                    patterns = analyze_market_patterns(market_snapshot)
-                    
-                    for detail in patterns['pattern_details']:
-                        logger.info(detail)
-                    
-                    # Only proceed if we have good trading conditions
-                    if patterns['has_sufficient_volume'] and patterns['has_price_swings']:
-                        # Get additional data for AI
-                        sentiment_data = await sentiment.get_sentiment_data("TRUMP")
-                        correlation_data = await correlation.get_correlation_data("TRUMPUSDC")
-                        
-                        # Consult AI
-                        buy_decision = await state_manager.consult_ai(
-                            "BUY",
-                            market_snapshot,
-                            sentiment_data,
-                            correlation_data
-                        )
-                        
-                        logger.info("\nAI Analysis:")
-                        logger.info(f"Suggested Entry Price: {buy_decision['price']} USDC")
-                        logger.info(f"Confidence Score: {buy_decision['confidence']}")
-                        logger.info(f"Pattern Recognition: {buy_decision['reasoning']}")
-                        
-                        if dry_run:
-                            logger.info("\nDRY RUN - Would place order:")
-                            logger.info(f"Type: BUY")
-                            logger.info(f"Price: {buy_decision['price']} USDC")
-                            logger.info(f"Size: 0.25 TRUMP")
-                            await asyncio.sleep(60)
-                            continue
-                        
-                        # Place order if price is valid
-                        if buy_decision["price"] > 0:
-                            logger.info("Placing BUY order...")
-                            await state_manager.place_buy_order(buy_decision["price"], Decimal("0.25"))
-                            break
-                    else:
-                        logger.info("\nInsufficient market conditions for trading:")
-                        if not patterns['has_sufficient_volume']:
-                            logger.info("- Low trading volume")
-                            # Show volume details
-                            logger.info(f"  Current volume: {market_snapshot.get('volume', 0):.2f} USDC/24h")
-                            logger.info(f"  Required: >100,000 USDC/24h")
-                            
-                        if not patterns['has_price_swings']:
-                            logger.info("- Insufficient price movement")
-                            # Show price movement details that we collected
-                            price_details = [d for d in patterns['pattern_details'] 
-                                          if "price" in d.lower() or "swing" in d.lower()]
-                            for detail in price_details:
-                                logger.info(f"  {detail}")
-                            
-                        if not patterns['has_order_book_depth']:
-                            logger.info("- Shallow order book")
-                            # Show order book details
-                            bid_depth = market_snapshot.get('bid_volume', 0)
-                            ask_depth = market_snapshot.get('ask_volume', 0)
-                            logger.info(f"  Current depth: {bid_depth:.0f} USDC bids / {ask_depth:.0f} USDC asks")
-                            logger.info(f"  Required: >10,000 USDC on each side")
-                        
-                    logger.info("\nWaiting 60 seconds before next analysis...")
-                    try:
-                        await asyncio.sleep(60)
-                    except asyncio.CancelledError:
-                        logger.info("Received shutdown signal during wait")
-                        raise
-                        
-            except asyncio.CancelledError:
-                logger.info("Shutting down during analysis...")
-                await market_data.stop()
-                if not dry_run:
-                    await state_manager.stop()
-                await cleanup(session)
-                return
+            
+            # Get market data
+            market_snapshot = await market_data.get_market_snapshot(max_retries=3, retry_delay=2.0)
+            if not market_snapshot.get('price'):
+                raise ValueError("Failed to get valid market price")
+            
+            # Print market analysis
+            logger.info("\nMarket Analysis:")
+            logger.info(f"Current Price: {market_snapshot['price']} USDC")
+            
+            # Analyze market patterns
+            patterns = analyze_market_patterns(market_snapshot)
+            for detail in patterns['pattern_details']:
+                logger.info(detail)
+            
+            if not (patterns['has_sufficient_volume'] and patterns['has_price_swings']):
+                raise ValueError("Insufficient market conditions for trading")
+            
+            # Get correlation data for AI
+            correlation_data = await correlation.get_correlation_data("TRUMPUSDC")
+            
+            # Consult AI for BUY
+            buy_decision = await state_manager.consult_ai(
+                "BUY",
+                market_snapshot,
+                None,  # Skip sentiment data
+                correlation_data
+            )
+            
+            logger.info("\nAI Analysis:")
+            logger.info(f"Suggested Entry Price: {buy_decision['price']} USDC")
+            logger.info(f"Confidence Score: {buy_decision['confidence']}")
+            logger.info(f"Pattern Recognition: {buy_decision['reasoning']}")
             
             if dry_run:
+                logger.info("\nDRY RUN - Would place order:")
+                logger.info(f"Type: BUY")
+                logger.info(f"Price: {buy_decision['price']} USDC")
+                logger.info(f"Size: 0.25 TRUMP")
                 return
-                
-            # Only proceed to wait for order if we successfully placed one
-            if state_manager.current_position is None:
-                logger.info("No buy order placed, exiting...")
-                return
-                
-            # Wait for BUY order to fill
-            logger.info("Waiting for BUY order to fill...")
-            while state_manager.current_position is None:
-                await asyncio.sleep(5)
             
-            entry_price = state_manager.current_position.entry_price
-            logger.info(f"BUY order filled at {entry_price}")
-            
-            # Wait for SELL conditions
-            logger.info("Waiting for optimal SELL conditions...")
-            while True:
-                # Get current market data
-                market_snapshot = await market_data.get_market_snapshot()
-                current_price = Decimal(market_snapshot["price"])
+            # Place BUY order
+            if buy_decision["price"] > 0:
+                logger.info("Placing BUY order...")
                 
-                # Only consider selling if we're in profit
-                if current_price > entry_price:
-                    sentiment_data = await sentiment.get_sentiment_data("TRUMP")
-                    correlation_data = await correlation.get_correlation_data("TRUMPUSDC")
-                    
-                    # Consult AI for SELL decision
-                    sell_decision = await state_manager.consult_ai(
-                        "SELL",
-                        market_snapshot,
-                        sentiment_data,
-                        correlation_data
+                # Check available balance and calculate maximum quantity
+                available_balance = await state_manager.get_available_balance()
+                price = Decimal(str(buy_decision["price"]))
+                max_quantity = (available_balance * Decimal("0.99")) / price  # Use 99% of balance to account for fees
+                
+                # Apply LOT_SIZE rules for TRUMPUSDC
+                MIN_QTY = Decimal("0.001")  # Minimum quantity
+                STEP_SIZE = Decimal("0.001")  # Must be multiple of this
+                MIN_NOTIONAL = Decimal("1.0")  # Minimum order value in USDC
+                
+                # Calculate valid quantity respecting LOT_SIZE rules
+                # Target 1.2 USDC order value
+                target_value = Decimal("1.2")
+                desired_quantity = min((target_value / price).quantize(STEP_SIZE), max_quantity)
+                # Round down to nearest step size
+                valid_quantity = (desired_quantity // STEP_SIZE) * STEP_SIZE
+                
+                # Check minimum quantity
+                if valid_quantity < MIN_QTY:
+                    logger.error(f"Calculated quantity {valid_quantity} is below minimum {MIN_QTY}")
+                    return
+                
+                # Check minimum order value
+                order_value = valid_quantity * price
+                if order_value < MIN_NOTIONAL:
+                    # Adjust quantity to meet minimum order value
+                    valid_quantity = (MIN_NOTIONAL / price).quantize(STEP_SIZE, rounding='ROUND_UP')
+                    logger.info(f"Adjusted quantity to {valid_quantity} to meet minimum order value of {MIN_NOTIONAL} USDC")
+                
+                logger.info(f"Available USDC: {available_balance}")
+                logger.info(f"Order Quantity: {valid_quantity} TRUMP at {price} USDC")
+                logger.info(f"Total Order Value: {valid_quantity * price} USDC")
+                
+                try:
+                    order = await state_manager.place_buy_order(
+                        price=price,
+                        quantity=valid_quantity
                     )
+                    logger.info("Waiting for BUY order to fill...")
                     
-                    if sell_decision["confidence"] > 0.7:
-                        logger.info(f"AI recommends SELL at {sell_decision['price']} with confidence {sell_decision['confidence']}")
-                        await state_manager.place_sell_order(sell_decision["price"], state_manager.current_position.quantity)
-                        break
+                    # Check order status every second
+                    while True:
+                        order_status = await state_manager.client.get_order(
+                            symbol=state_manager.symbol,
+                            orderId=order['orderId']
+                        )
                         
-                await asyncio.sleep(60)  # Check every minute
-                
+                        if order_status['status'] == 'FILLED':
+                            # Update state manager with the fill
+                            await state_manager.handle_order_update(order_status)
+                            entry_price = Decimal(str(order_status['price']))
+                            logger.info(f"BUY order filled at {entry_price}")
+                            
+                            # Use the AI recommendation we already have for the exit price
+                            # The market conditions haven't changed significantly in these few seconds
+                            if buy_decision["confidence"] > 0.7:
+                                # Calculate sell price with 0.5% minimum margin, rounded to 2 decimal places
+                                margin = max(Decimal("0.005"), Decimal("0.01"))  # Use 1% if AI is confident
+                                sell_price = (entry_price * (Decimal("1") + margin)).quantize(Decimal("0.01"))
+                                
+                                logger.info(f"Using {margin*100:.1f}% margin based on market conditions")
+                                logger.info(f"Placing SELL order at {sell_price} USDC ({margin*100:.1f}% profit target)")
+                                
+                                # Get quantity from current position
+                                sell_quantity = state_manager.current_position.quantity
+                                logger.info(f"Selling position quantity: {sell_quantity} TRUMP")
+                                
+                                # Place sell order immediately
+                                await state_manager.place_sell_order(
+                                    price=sell_price,
+                                    quantity=sell_quantity
+                                )
+                            else:
+                                # If AI not confident, use conservative 0.5% margin
+                                sell_price = (entry_price * Decimal("1.005")).quantize(Decimal("0.01"))
+                                logger.info(f"Using conservative 0.5% margin due to low AI confidence")
+                                logger.info(f"Placing SELL order at {sell_price} USDC")
+                                
+                                # Get quantity from current position
+                                sell_quantity = state_manager.current_position.quantity
+                                logger.info(f"Selling position quantity: {sell_quantity} TRUMP")
+                                
+                                await state_manager.place_sell_order(
+                                    price=sell_price,
+                                    quantity=sell_quantity
+                                )
+                            break
+                        elif order_status['status'] in ['CANCELED', 'REJECTED', 'EXPIRED']:
+                            logger.error(f"Order {order_status['status']}")
+                            return
+                        
+                        await asyncio.sleep(1)
+                    
+                except Exception as e:
+                    logger.error(f"Error placing buy order: {e}")
+                    return
+            
             # Wait for SELL order to fill
             logger.info("Waiting for SELL order to fill...")
             while state_manager.current_position is not None:
-                await asyncio.sleep(5)
+                await asyncio.sleep(1)
             
-            # Log final balance and trade summary
-            final_balance = await state_manager.get_available_balance()
-            profit = final_balance - initial_balance
-            logger.info(f"Trade completed!")
-            logger.info(f"Final USDC Balance: {final_balance}")
-            logger.info(f"Profit/Loss: {profit} USDC")
+            # Log trade summary
+            if state_manager.trades:
+                last_trade = state_manager.trades[-1]
+                logger.info("\nTrade Summary:")
+                logger.info(f"Entry Price: {last_trade.buy_order.price} USDC")
+                logger.info(f"Exit Price: {last_trade.sell_order.price} USDC")
+                logger.info(f"Quantity: {last_trade.buy_order.quantity} TRUMP")
+                logger.info(f"Profit/Loss: {last_trade.profit_loss} USDC")
             
-    except KeyboardInterrupt:
-        logger.info("Received shutdown signal")
+            logger.info("Test cycle completed successfully!")
+    
     except Exception as e:
         logger.error(f"Error during trading cycle: {e}")
+        raise
     finally:
         logger.info("Shutting down gracefully...")
-        # Cleanup
-        await market_data.stop()
-        await client.close_connection()
+        if market_data:
+            await market_data.stop()
+        if client:
+            await client.close_connection()
 
 def handle_signal(signum, frame):
     """Handle shutdown signals"""
