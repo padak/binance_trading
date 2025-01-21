@@ -3,6 +3,14 @@
 Production test script that runs one complete BUY/SELL cycle.
 This script initializes all required services, executes a single trade cycle,
 and provides detailed logging of the process.
+
+TODO:
+- Optimize AI consultation frequency to reduce API costs:
+  1. Add cooldown period after rejected recommendations (e.g., wait 5-10 minutes instead of 1)
+  2. Track market conditions that led to low confidence and skip AI calls in similar conditions
+  3. Implement caching for AI recommendations with similar market conditions
+  4. Add price change threshold - only consult AI if price moved significantly
+  5. Consider implementing a pre-filter using technical indicators before calling AI
 """
 
 import asyncio
