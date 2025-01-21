@@ -64,31 +64,29 @@ class SentimentAnalyzer:
                     "Content-Type": "application/json"
                 }
                 
-                # Add rate limit handling
-                for attempt in range(3):  # Try up to 3 times
-                    async with session.get(url, headers=headers, params=params) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            tweets = data.get('data', [])
-                            logger.info(f"Found {len(tweets)} tweets about {symbol}")
-                            
-                            if tweets:
-                                sentiment = await self._analyze_tweets(tweets)
-                                return {
-                                    "mention_count": len(tweets),
-                                    "sentiment_scores": sentiment,
-                                    "sample_tweets": [t['text'] for t in tweets[:3]]
-                                }
-                            break
-                        elif response.status == 429:  # Rate limit exceeded
-                            wait_time = int(response.headers.get('x-rate-limit-reset', 60))
-                            logger.warning(f"Rate limit hit, waiting {wait_time} seconds...")
-                            await asyncio.sleep(min(wait_time, 60))  # Wait but not more than 60 seconds
-                            continue
-                        else:
-                            error_data = await response.text()
-                            logger.error(f"Twitter API error: {error_data}")
-                            break
+                async with session.get(url, headers=headers, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        tweets = data.get('data', [])
+                        logger.info(f"Found {len(tweets)} tweets about {symbol}")
+                        
+                        if tweets:
+                            sentiment = await self._analyze_tweets(tweets)
+                            return {
+                                "mention_count": len(tweets),
+                                "sentiment_scores": sentiment,
+                                "sample_tweets": [t['text'] for t in tweets[:3]]
+                            }
+                    elif response.status == 429:  # Rate limit exceeded
+                        logger.warning("Twitter API rate limit hit, skipping social sentiment analysis")
+                        return {
+                            "mention_count": 0,
+                            "sentiment_scores": {"bullish_ratio": 0, "bearish_ratio": 0, "neutral_ratio": 1},
+                            "sample_tweets": []
+                        }
+                    else:
+                        error_data = await response.text()
+                        logger.error(f"Twitter API error: {error_data}")
             return {}
         except Exception as e:
             logger.error(f"Error getting Twitter sentiment: {e}")
