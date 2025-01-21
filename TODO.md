@@ -18,10 +18,26 @@
 - Risk management features
 
 ## Bugs
-- WebSocket reconnection not working properly after network interruption
-  - Issue: After WiFi reconnects, the script fails to re-establish WebSocket connection
-  - Error: "Failed to connect to websocket: [Errno 8] nodename nor servname provided, or not known"
+- WebSocket connection stability issues
+  - Multiple types of connection failures observed:
+    1. Keepalive ping timeout errors (Error 1011)
+    2. Policy violation/Pong timeout errors (Error 1008)
+    3. DNS resolution failures after network interruption
+    4. Silent connection drops with no close frame
+  - Specific error patterns:
+    * "keepalive ping timeout; no close frame received"
+    * "policy violation Pong timeout"
+    * "nodename nor servname provided, or not known"
+    * "Cannot connect to host api.binance.com:443"
+  - Connection drops occurring every 15-45 minutes
+  - Reconnection attempts failing after network interruption
   - Priority: High
+  - Potential fixes needed:
+    * Implement proper ping/pong handling
+    * Add DNS resolution retry logic
+    * Improve keepalive mechanism
+    * Handle SSL/TLS connection properly
+    * Add connection health monitoring
 
 ## Planned 📋
 - Email/Telegram notifications
