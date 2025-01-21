@@ -63,14 +63,14 @@ class TradingEngine:
         
         # Default configuration
         self.config = {
-            'min_confidence': 0.7,
-            'max_position_size': Decimal('1000'),  # USDC
-            'risk_per_trade': Decimal('0.02'),     # 2% risk per trade
-            'technical_weight': 0.4,
-            'sentiment_weight': 0.3,
-            'correlation_weight': 0.3,
-            'stop_loss_pct': Decimal('0.02'),      # 2% stop loss
-            'take_profit_pct': Decimal('0.05'),    # 5% take profit
+            'min_confidence': 0.7,           # Minimum confidence for trade execution
+            'max_position_size': Decimal('10'),  # Maximum position size in USDC (reduced from 1000)
+            'risk_per_trade': Decimal('0.1'),   # 10% risk per trade (increased from 2% due to small account)
+            'technical_weight': 0.4,         # Weight for technical signals
+            'sentiment_weight': 0.3,         # Weight for sentiment signals
+            'correlation_weight': 0.3,       # Weight for correlation signals
+            'stop_loss_pct': Decimal('0.02'),   # 2% stop loss
+            'take_profit_pct': Decimal('0.05')  # 5% take profit
         }
         if config:
             self.config.update(config)

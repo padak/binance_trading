@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional
 import numpy as np
-from binance import ThreadedWebsocketManager
+from binance import AsyncClient, BinanceSocketManager
 import logging
 import statistics
+import asyncio
 
 # Configure logging
 logging.basicConfig(
@@ -112,8 +113,10 @@ class MarketDataService:
         self.ma20: Optional[float] = None
         self.vwap: Optional[float] = None
         
-        # WebSocket manager
-        self.twm: Optional[ThreadedWebsocketManager] = None
+        # Async client and socket manager
+        self.client: Optional[AsyncClient] = None
+        self.bsm: Optional[BinanceSocketManager] = None
+        self.socket_tasks = []
         
         self.rsi_period = 14
         self.rsi_values = deque(maxlen=self.rsi_period)
@@ -124,33 +127,48 @@ class MarketDataService:
         
         self.futures_data = {}
         
-    def start(self, api_key: str, api_secret: str):
+    async def start(self, api_key: str, api_secret: str):
         """Start market data collection"""
-        self.twm = ThreadedWebsocketManager(api_key=api_key, api_secret=api_secret)
-        self.twm.start()
+        # Initialize async client
+        self.client = await AsyncClient.create(api_key=api_key, api_secret=api_secret)
+        self.bsm = BinanceSocketManager(self.client)
         
         # Start trade socket
-        self.twm.start_symbol_ticker_socket(
-            callback=self._handle_ticker,
-            symbol=self.symbol
-        )
+        ts = self.bsm.symbol_ticker_socket(self.symbol)
+        self.socket_tasks.append(asyncio.create_task(self._handle_socket(ts, self._handle_ticker)))
         
         # Start order book socket
-        self.twm.start_depth_socket(
-            callback=self._handle_depth,
-            symbol=self.symbol
-        )
+        ds = self.bsm.depth_socket(self.symbol)
+        self.socket_tasks.append(asyncio.create_task(self._handle_socket(ds, self._handle_depth)))
         
         logger.info(f"Started market data collection for {self.symbol}")
         
-    def stop(self):
+    async def stop(self):
         """Stop market data collection"""
-        if self.twm:
-            self.twm.stop()
-            self.twm = None
+        # Cancel all socket tasks
+        for task in self.socket_tasks:
+            task.cancel()
+        self.socket_tasks.clear()
+        
+        # Close the client
+        if self.client:
+            await self.client.close_connection()
+            self.client = None
+            
         logger.info("Stopped market data collection")
         
-    def _handle_ticker(self, msg: dict):
+    async def _handle_socket(self, socket, handler):
+        """Generic socket message handler"""
+        async with socket as ts:
+            while True:
+                try:
+                    msg = await ts.recv()
+                    await handler(msg)
+                except Exception as e:
+                    logger.error(f"Socket error: {e}")
+                    break
+        
+    async def _handle_ticker(self, msg: dict):
         """Process ticker updates"""
         try:
             if msg.get('e') == 'error':
@@ -165,7 +183,7 @@ class MarketDataService:
         except Exception as e:
             logger.error(f"Error processing ticker: {e}")
             
-    def _handle_depth(self, msg: dict):
+    async def _handle_depth(self, msg: dict):
         """Process order book updates"""
         try:
             if msg.get('e') == 'error':
@@ -236,39 +254,24 @@ class MarketDataService:
             "histogram": macd_line - signal_line
         }
         
-    async def get_market_snapshot(self) -> Dict:
-        """Get comprehensive market data snapshot including historical context"""
-        current_data = {
-            "market_state": {
-                "current_price": self.last_price,
-                "order_book_imbalance": self.order_book.get_imbalance(),
-                "volume_profile": {
-                    "bid_volume": sum(bid[1] for bid in self.order_book.bids[:10]),
-                    "ask_volume": sum(ask[1] for ask in self.order_book.asks[:10])
-                },
-                "technical_indicators": {
-                    "ma5": self.calculate_ma(5),
-                    "ma20": self.calculate_ma(20),
-                    "vwap": self.calculate_vwap(),
-                    "rsi": self.calculate_rsi(),
-                    "macd": self.calculate_macd()
-                },
-                "liquidity_metrics": self.order_book.get_liquidity_metrics(),
-                "manipulation_indicators": {
-                    "spoofing_detected": self.order_book.detect_spoofing(),
-                    "abnormal_volume": self.detect_abnormal_volume(),
-                    "price_volume_divergence": self.detect_price_volume_divergence()
-                }
-            },
-            "futures_market": await self._get_futures_data(),
-            "historical": await self._get_historical_data(),
-            "sentiment": await self._get_market_sentiment(),
-            "metadata": {
-                "symbol": self.symbol,
-                "timestamp": datetime.now().isoformat()
-            }
+    async def get_market_snapshot(self) -> dict:
+        """Get current market snapshot with all relevant data."""
+        # Convert order book bids/asks to lists before slicing
+        bids = list(self.order_book.bids.items())[:10]
+        asks = list(self.order_book.asks.items())[:10]
+        
+        return {
+            "price": self.last_price,
+            "timestamp": datetime.now().isoformat(),
+            "bid_volume": sum(bid[1] for bid in bids),
+            "ask_volume": sum(ask[1] for ask in asks),
+            "ma_signal": self.calculate_ma_signal(),
+            "rsi": self.calculate_rsi(),
+            "macd_signal": self.calculate_macd_signal(),
+            "order_book_imbalance": self.calculate_order_book_imbalance(),
+            "buy_sell_ratio": self.calculate_buy_sell_ratio(),
+            "large_orders": self.detect_large_orders()
         }
-        return current_data
 
     async def _get_historical_data(self) -> Dict:
         """Collect historical price and trade data"""
@@ -413,3 +416,70 @@ class MarketDataService:
         except Exception as e:
             logger.error(f"Error calculating OI change: {e}")
             return 0 
+
+    def calculate_ma_signal(self) -> float:
+        """Calculate moving average signal (-1 bearish, 0 neutral, 1 bullish)"""
+        if not self.ma5 or not self.ma20:
+            return 0
+        return 1 if self.ma5 > self.ma20 else -1 if self.ma5 < self.ma20 else 0
+    
+    def calculate_macd_signal(self) -> float:
+        """Calculate MACD signal (-1 bearish, 0 neutral, 1 bullish)"""
+        macd_data = self.calculate_macd()
+        if not macd_data:
+            return 0
+        return 1 if macd_data['histogram'] > 0 else -1 if macd_data['histogram'] < 0 else 0
+    
+    def calculate_order_book_imbalance(self) -> float:
+        """Calculate order book imbalance"""
+        return self.order_book.get_imbalance()
+    
+    def calculate_buy_sell_ratio(self) -> float:
+        """Calculate buy/sell ratio from recent trades"""
+        if not self.trades:
+            return 1.0
+        buys = sum(1 for trade in self.trades if trade.get('isBuyerMaker', False))
+        sells = len(self.trades) - buys
+        return buys / sells if sells > 0 else 1.0
+    
+    def detect_large_orders(self) -> int:
+        """Count number of large orders (>1000 USDC) in recent trades"""
+        if not self.trades:
+            return 0
+        return sum(1 for trade in self.trades 
+                  if float(trade.get('quoteQty', 0)) > 1000) 
+
+    async def get_price_history(self, interval: str = '5m', limit: int = 288) -> List[Candle]:
+        """
+        Get historical price data
+        
+        Args:
+            interval: Kline interval (e.g., '5m', '15m', '1h')
+            limit: Number of candles to fetch
+            
+        Returns:
+            List of Candle objects
+        """
+        try:
+            klines = await self.client.get_klines(
+                symbol=self.symbol,
+                interval=interval,
+                limit=limit
+            )
+            
+            return [
+                Candle(
+                    timestamp=datetime.fromtimestamp(kline[0] / 1000),
+                    open=float(kline[1]),
+                    high=float(kline[2]),
+                    low=float(kline[3]),
+                    close=float(kline[4]),
+                    volume=float(kline[5]),
+                    trades=int(kline[8]),
+                    vwap=float(kline[7]) if len(kline) > 7 else None
+                )
+                for kline in klines
+            ]
+        except Exception as e:
+            logger.error(f"Error fetching price history: {e}")
+            return [] 
