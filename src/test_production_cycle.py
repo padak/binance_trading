@@ -85,13 +85,19 @@ async def run_single_cycle():
                 correlation_data
             )
             
-            if buy_decision["confidence"] > 0.7:
+            if buy_decision["confidence"] >= 0.7:
                 logger.info(f"\nAI recommends BUY:")
                 logger.info(f"Price: {buy_decision['price']} USDC")
                 logger.info(f"Confidence: {buy_decision['confidence']}")
                 logger.info(f"Reasoning: {buy_decision['reasoning']}")
-                await state_manager.place_buy_order(buy_decision["price"], Decimal("0.25"))
-                break
+                
+                # Only place order if we have a valid price
+                if buy_decision["price"] > 0:
+                    logger.info("Placing BUY order...")
+                    await state_manager.place_buy_order(buy_decision["price"], Decimal("0.25"))
+                    break
+                else:
+                    logger.warning("AI returned confidence >= 0.7 but invalid price (0), waiting for next analysis...")
             else:
                 logger.info(f"\nAI confidence too low for BUY: {buy_decision['confidence']}")
                 logger.info("Waiting 60 seconds before next analysis...")
