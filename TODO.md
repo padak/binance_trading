@@ -86,6 +86,13 @@
     * Handle SSL/TLS connection properly
     * Add connection health monitoring
 
+- Order Status Detection Issue
+  - File: src/test_production_cycle.py
+  - Problem: Script not properly identifying when SELL orders are filled
+  - Priority: High
+  - Impact: Trading cycle may not complete properly after successful SELL
+  - Needs investigation of order status monitoring logic
+
 ## Planned 📋
 - Email/Telegram notifications
 - Custom trading strategies
