@@ -256,22 +256,65 @@ class MarketDataService:
         
     async def get_market_snapshot(self) -> dict:
         """Get current market snapshot with all relevant data."""
-        # Convert order book bids/asks to lists before slicing
-        bids = list(self.order_book.bids.items())[:10]
-        asks = list(self.order_book.asks.items())[:10]
-        
-        return {
-            "price": self.last_price,
-            "timestamp": datetime.now().isoformat(),
-            "bid_volume": sum(bid[1] for bid in bids),
-            "ask_volume": sum(ask[1] for ask in asks),
-            "ma_signal": self.calculate_ma_signal(),
-            "rsi": self.calculate_rsi(),
-            "macd_signal": self.calculate_macd_signal(),
-            "order_book_imbalance": self.calculate_order_book_imbalance(),
-            "buy_sell_ratio": self.calculate_buy_sell_ratio(),
-            "large_orders": self.detect_large_orders()
-        }
+        try:
+            # Get historical data
+            historical = await self._get_historical_data()
+            
+            # Convert order book bids/asks to lists before slicing
+            bids = list(self.order_book.bids.items())[:10]
+            asks = list(self.order_book.asks.items())[:10]
+            
+            # Calculate order book metrics
+            best_bid = max(self.order_book.bids.keys()) if self.order_book.bids else 0
+            best_ask = min(self.order_book.asks.keys()) if self.order_book.asks else float('inf')
+            spread = best_ask - best_bid if best_bid and best_ask != float('inf') else 0
+            
+            # Get liquidity metrics
+            liquidity = self.order_book.get_liquidity_metrics()
+            
+            return {
+                # Current price and time
+                "price": self.last_price,
+                "timestamp": datetime.now().isoformat(),
+                
+                # Order book data
+                "best_bid": best_bid,
+                "best_ask": best_ask,
+                "spread": spread,
+                "bid_volume": self.order_book.bid_volume,
+                "ask_volume": self.order_book.ask_volume,
+                "order_book_imbalance": self.order_book.get_imbalance(),
+                "liquidity_metrics": liquidity,
+                
+                # Technical indicators
+                "ma5": self.ma5,
+                "ma20": self.ma20,
+                "vwap": self.vwap,
+                "rsi": self.calculate_rsi(),
+                "macd": self.calculate_macd(),
+                
+                # Historical context
+                "historical": historical,
+                
+                # Market signals
+                "spoofing_detected": self.order_book.detect_spoofing(),
+                "large_orders": self.detect_large_orders() if hasattr(self, 'detect_large_orders') else [],
+                
+                # Volume profile
+                "volume_profile": {
+                    "total_volume": historical.get("24h_volume", 0),
+                    "bid_ask_ratio": self.order_book.bid_volume / self.order_book.ask_volume if self.order_book.ask_volume else 1,
+                    "depth_imbalance": liquidity["bid_depth"] / liquidity["ask_depth"] if liquidity["ask_depth"] else 1
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error getting market snapshot: {e}")
+            # Return minimal data to prevent errors
+            return {
+                "price": self.last_price,
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e)
+            }
 
     async def _get_historical_data(self) -> Dict:
         """Collect historical price and trade data"""
