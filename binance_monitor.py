@@ -5,6 +5,8 @@ from binance import ThreadedWebsocketManager, Client
 from dotenv import load_dotenv
 import logging
 import time
+import socket
+import requests
 
 """
 Binance WebSocket Monitor
@@ -122,57 +124,81 @@ Order ID: {msg.get('i')}
         logger.error(f"Error processing message: {e}")
         logger.debug(f"Message content: {msg}")
 
+def check_internet_connection():
+    """Check if we can reach Binance"""
+    try:
+        # Try to resolve and connect to Binance
+        socket.create_connection(("api.binance.com", 443), timeout=3)
+        return True
+    except OSError:
+        return False
+
 def main():
     twm = None
     reconnect_count = 0
     max_reconnects = 5
     
     try:
-        # Initialize ThreadedWebsocketManager with read-only API keys
-        # Uses WSS (WebSocket Secure) by default: wss://stream.binance.com:9443
-        twm = ThreadedWebsocketManager(api_key=API_KEY, api_secret=API_SECRET)
-        
-        logger.info("Starting WebSocket manager...")
-        twm.start()
-        
-        print("Starting Binance order monitor (WSS)...")
-        print("Press Ctrl+C to exit")
-        logger.info("WebSocket connection established")
-        
-        # Start user data socket (secure WebSocket connection)
-        conn_key = twm.start_user_socket(callback=process_message)
-        
-        # Keep the script running with connection monitoring
-        while True:
-            if twm.is_alive():
-                time.sleep(1)  # Check connection status every second
-                reconnect_count = 0  # Reset counter when connection is stable
-            else:
-                logger.warning("WebSocket connection lost!")
+        while True:  # Outer loop for connection management
+            try:
+                # Check internet connectivity first
+                if not check_internet_connection():
+                    logger.warning("No internet connection. Waiting for network...")
+                    time.sleep(5)  # Wait before checking again
+                    continue
+
+                # Initialize ThreadedWebsocketManager with read-only API keys
+                if twm is None:
+                    twm = ThreadedWebsocketManager(api_key=API_KEY, api_secret=API_SECRET)
+                    logger.info("Starting WebSocket manager...")
+                    twm.start()
+                    print("Starting Binance order monitor (WSS)...")
+                    print("Press Ctrl+C to exit")
+                
+                # Start user data socket (secure WebSocket connection)
+                conn_key = twm.start_user_socket(callback=process_message)
+                logger.info("WebSocket connection established")
+                
+                # Reset reconnect counter on successful connection
+                reconnect_count = 0
+                
+                # Inner loop for connection monitoring
+                while True:
+                    if not twm.is_alive():
+                        raise Exception("WebSocket connection lost")
+                    time.sleep(1)
+                    
+            except Exception as e:
+                logger.error(f"Connection error: {e}")
+                
+                if twm:
+                    try:
+                        twm.stop()
+                        logger.info("Closed previous connection")
+                    except:
+                        pass
+                    twm = None
+
                 if reconnect_count < max_reconnects:
                     reconnect_count += 1
-                    logger.info(f"Attempting reconnection ({reconnect_count}/{max_reconnects})...")
-                    twm.stop()  # Clean stop before reconnecting
-                    time.sleep(2 ** reconnect_count)  # Exponential backoff
-                    twm = ThreadedWebsocketManager(api_key=API_KEY, api_secret=API_SECRET)
-                    twm.start()
-                    conn_key = twm.start_user_socket(callback=process_message)
+                    wait_time = 2 ** reconnect_count
+                    logger.warning(f"Connection lost! Attempting reconnection {reconnect_count}/{max_reconnects} in {wait_time} seconds...")
+                    time.sleep(wait_time)  # Exponential backoff
                 else:
                     logger.error("Max reconnection attempts reached. Exiting...")
                     break
-            
+                    
     except KeyboardInterrupt:
         print("\nStopping monitor...")
-        
-    except Exception as e:
-        print(f"Error: {e}")
-        logger.error(f"Error in main loop: {e}")
         
     finally:
         if twm:
             logger.info("Closing WebSocket connection...")
-            twm.stop()
-            logger.info("WebSocket connection closed")
+            try:
+                twm.stop()
+                logger.info("WebSocket connection closed")
+            except:
+                pass
 
 if __name__ == "__main__":
     main() 
