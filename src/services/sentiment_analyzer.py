@@ -11,10 +11,22 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 class SentimentAnalyzer:
-    def __init__(self):
+    def __init__(self, client=None):
+        """Initialize sentiment analyzer with optional Binance client"""
+        self.client = client
+        self.twitter_api = None
+        self.news_api = None
+        
+        # Load API keys
+        self.twitter_bearer_token = os.getenv('TWITTER_BEARER_TOKEN')
+        self.news_api_key = os.getenv('NEWS_API_KEY')
+        
+        if not self.twitter_bearer_token:
+            logger.warning("Twitter Bearer Token not found. Twitter analysis will be disabled.")
+        if not self.news_api_key:
+            logger.warning("News API Key not found. News analysis will be disabled.")
+        
         self.fear_greed_api = "https://api.alternative.me/fng/"
-        self.twitter_bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
-        self.news_api_key = os.getenv("NEWS_API_KEY")
         
     async def get_sentiment_data(self, symbol: str) -> Dict:
         """Get comprehensive sentiment analysis"""

@@ -238,16 +238,43 @@ class TradingEngine:
         """Execute the trading signal through the state manager."""
         try:
             if signal.action == 'BUY':
+                # Verify available balance first
+                available_balance = await self.state_manager.get_available_balance()
+                required_amount = signal.price * signal.quantity
+                
+                if available_balance < required_amount:
+                    logger.error(f"Insufficient balance for BUY order. Required: {required_amount} USDC, Available: {available_balance} USDC")
+                    
+                    # Try with 50% of available balance if it's enough for minimum order
+                    adjusted_quantity = (available_balance * Decimal('0.5')) / signal.price
+                    min_order_value = Decimal('5')  # Minimum order value in USDC
+                    
+                    if available_balance * Decimal('0.5') >= min_order_value:
+                        logger.info(f"Retrying with adjusted quantity: {adjusted_quantity}")
+                        signal.quantity = adjusted_quantity
+                    else:
+                        logger.error(f"Available balance too low for minimum order value of {min_order_value} USDC")
+                        return
+                
                 # Calculate stop loss and take profit levels
                 stop_loss = signal.price * (1 - self.config['stop_loss_pct'])
                 take_profit = signal.price * (1 + self.config['take_profit_pct'])
                 
-                await self.state_manager.place_buy_order(
-                    price=signal.price,
-                    quantity=signal.quantity,
-                    stop_loss=stop_loss,
-                    take_profit=take_profit
-                )
+                try:
+                    await self.state_manager.place_buy_order(
+                        price=signal.price,
+                        quantity=signal.quantity,
+                        stop_loss=stop_loss,
+                        take_profit=take_profit
+                    )
+                except Exception as e:
+                    if "insufficient balance" in str(e).lower():
+                        logger.error(f"Order failed due to insufficient balance: {e}")
+                        # Update account balance and wait for next cycle
+                        await self.state_manager.update_balance()
+                    else:
+                        logger.error(f"Order failed: {e}")
+                        raise
                 
             else:  # SELL
                 await self.state_manager.place_sell_order(

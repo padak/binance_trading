@@ -56,11 +56,18 @@ class StateManager:
         self.active_order: Optional[Order] = None
         self.trades: List[Trade] = []
         self.last_ai_consultation: Optional[datetime] = None
+        self.client = None
         
         # Load OpenRouter API key
         self.openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
         if not self.openrouter_api_key:
             logger.warning("OpenRouter API key not found. AI consultation will be disabled.")
+            
+    async def start(self, api_key: str, api_secret: str):
+        """Initialize Binance client"""
+        from binance import AsyncClient
+        self.client = await AsyncClient.create(api_key=api_key, api_secret=api_secret)
+        logger.info("State manager initialized with Binance client")
     
     async def transition(self, new_state: TradingState, order: Optional[Order] = None) -> bool:
         """
@@ -257,3 +264,61 @@ class StateManager:
         except Exception as e:
             logger.error(f"Error parsing AI response: {e}")
             return {} 
+
+    async def get_available_balance(self) -> Decimal:
+        """Get available USDC balance"""
+        try:
+            account_info = await self.client.get_asset_balance(asset='USDC')
+            return Decimal(account_info['free'])
+        except Exception as e:
+            logger.error(f"Error getting balance: {e}")
+            return Decimal('0')
+            
+    async def update_balance(self) -> None:
+        """Update cached balance information"""
+        try:
+            # Get all asset balances
+            account_info = await self.client.get_account()
+            
+            # Log balances for monitoring
+            for balance in account_info['balances']:
+                if float(balance['free']) > 0 or float(balance['locked']) > 0:
+                    logger.info(f"Balance - {balance['asset']}: Free={balance['free']}, Locked={balance['locked']}")
+                    
+        except Exception as e:
+            logger.error(f"Error updating balance: {e}")
+            
+    async def place_buy_order(self, price: Decimal, quantity: Decimal, 
+                            stop_loss: Decimal, take_profit: Decimal) -> None:
+        """Place a buy order with safety checks"""
+        try:
+            # Verify balance first
+            available_balance = await self.get_available_balance()
+            required_amount = price * quantity
+            
+            if available_balance < required_amount:
+                raise ValueError(f"Insufficient USDC balance. Required: {required_amount}, Available: {available_balance}")
+            
+            # Place the order
+            order = await self.client.create_order(
+                symbol=self.symbol,
+                side='BUY',
+                type='LIMIT',
+                timeInForce='GTC',
+                quantity=str(quantity),
+                price=str(price)
+            )
+            
+            # Record the order and update state
+            await self.handle_order_update({
+                'orderId': order['orderId'],
+                'status': 'NEW',
+                'price': str(price),
+                'quantity': str(quantity)
+            })
+            
+            logger.info(f"Buy order placed - Price: {price} USDC, Quantity: {quantity}")
+            
+        except Exception as e:
+            logger.error(f"Error placing buy order: {e}")
+            raise 
