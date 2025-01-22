@@ -235,57 +235,33 @@ class TradingEngine:
         return quantity
 
     async def _execute_signal(self, signal: TradingSignal):
-        """Execute the trading signal through the state manager."""
+        """Execute a trading signal by placing appropriate orders."""
         try:
             if signal.action == 'BUY':
-                # Verify available balance first
-                available_balance = await self.state_manager.get_available_balance()
-                required_amount = signal.price * signal.quantity
+                # Calculate stop loss and take profit prices
+                stop_loss_price = signal.price * (Decimal('1') - self.config['stop_loss_pct'])
+                take_profit_price = signal.price * (Decimal('1') + self.config['take_profit_pct'])
                 
-                if available_balance < required_amount:
-                    logger.error(f"Insufficient balance for BUY order. Required: {required_amount} USDC, Available: {available_balance} USDC")
-                    
-                    # Try with 50% of available balance if it's enough for minimum order
-                    adjusted_quantity = (available_balance * Decimal('0.5')) / signal.price
-                    min_order_value = Decimal('5')  # Minimum order value in USDC
-                    
-                    if available_balance * Decimal('0.5') >= min_order_value:
-                        logger.info(f"Retrying with adjusted quantity: {adjusted_quantity}")
-                        signal.quantity = adjusted_quantity
-                    else:
-                        logger.error(f"Available balance too low for minimum order value of {min_order_value} USDC")
-                        return
-                
-                # Calculate stop loss and take profit levels
-                stop_loss = signal.price * (1 - self.config['stop_loss_pct'])
-                take_profit = signal.price * (1 + self.config['take_profit_pct'])
-                
-                try:
-                    await self.state_manager.place_buy_order(
-                        price=signal.price,
-                        quantity=signal.quantity,
-                        stop_loss=stop_loss,
-                        take_profit=take_profit
-                    )
-                except Exception as e:
-                    if "insufficient balance" in str(e).lower():
-                        logger.error(f"Order failed due to insufficient balance: {e}")
-                        # Update account balance and wait for next cycle
-                        await self.state_manager.update_balance()
-                    else:
-                        logger.error(f"Order failed: {e}")
-                        raise
-                
+                success = await self.state_manager.place_buy_order(
+                    price=float(signal.price),  # Convert Decimal to float for API
+                    quantity=float(signal.quantity),  # Convert Decimal to float for API
+                    stop_loss=float(stop_loss_price),  # Convert Decimal to float for API
+                    take_profit=float(take_profit_price)  # Convert Decimal to float for API
+                )
             else:  # SELL
-                await self.state_manager.place_sell_order(
-                    price=signal.price,
-                    quantity=signal.quantity
+                success = await self.state_manager.place_sell_order(
+                    price=float(signal.price),  # Convert Decimal to float for API
+                    quantity=float(signal.quantity)  # Convert Decimal to float for API
                 )
             
-            logger.info(f"Executed {signal.action} signal: {signal}")
+            if success:
+                logger.info(f"Successfully executed {signal.action} signal: {signal}")
+            else:
+                logger.error(f"Failed to execute {signal.action} signal")
             
         except Exception as e:
             logger.error(f"Error executing signal: {e}")
+            raise  # Re-raise the exception for proper error handling
 
     async def get_trading_summary(self) -> Dict:
         """Get summary of current trading state and recent signals."""
