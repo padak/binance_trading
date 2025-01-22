@@ -260,7 +260,10 @@ Return ONLY a JSON object in this exact format:
     async def get_available_balance(self) -> Decimal:
         """Get available USDC balance"""
         try:
-            account_info = await self.client.get_asset_balance(asset='USDC')
+            account_info = await self.client.get_asset_balance(
+                asset='USDC',
+                recvWindow=60000
+            )
             return Decimal(account_info['free'])
         except Exception as e:
             logger.error(f"Error getting balance: {e}")
@@ -270,7 +273,7 @@ Return ONLY a JSON object in this exact format:
         """Update cached balance information"""
         try:
             # Get all asset balances
-            account_info = await self.client.get_account()
+            account_info = await self.client.get_account(recvWindow=60000)
             
             # Log balances for monitoring
             for balance in account_info['balances']:
@@ -297,7 +300,8 @@ Return ONLY a JSON object in this exact format:
                 type=ORDER_TYPE_LIMIT,
                 timeInForce=TIME_IN_FORCE_GTC,
                 quantity=str(quantity),
-                price=str(price)
+                price=str(price),
+                recvWindow=60000
             )
             
             # Create Order object
@@ -347,7 +351,8 @@ Return ONLY a JSON object in this exact format:
                 type=ORDER_TYPE_LIMIT,
                 timeInForce=TIME_IN_FORCE_GTC,
                 quantity=str(formatted_quantity),
-                price=str(price)
+                price=str(price),
+                recvWindow=60000
             )
             
             # Create Order object

@@ -209,8 +209,6 @@ async def run_single_cycle(dry_run=False):
                 api_key=api_key,
                 api_secret=api_secret
             )
-            # Set recvWindow after creation if needed
-            client._request_options['recvWindow'] = 60000
 
             market_data = MarketDataService("TRUMPUSDC")
             correlation = CorrelationAnalyzer(client)
@@ -346,7 +344,10 @@ async def run_single_cycle(dry_run=False):
                                 
                                 # Monitor SELL order status
                                 logger.info("Waiting for SELL order to fill...")
-                                sell_orders = await state_manager.client.get_open_orders(symbol=state_manager.symbol)
+                                sell_orders = await state_manager.client.get_open_orders(
+                                    symbol=state_manager.symbol,
+                                    recvWindow=60000  # Add recvWindow parameter
+                                )
                                 sell_order = next((order for order in sell_orders if order['side'] == 'SELL'), None)
                                 
                                 if sell_order:
@@ -360,14 +361,14 @@ async def run_single_cycle(dry_run=False):
                                             await state_manager.client.close_connection()
                                             state_manager.client = await AsyncClient.create(
                                                 api_key=os.getenv("BINANCE_TRADE_API_KEY"),
-                                                api_secret=os.getenv("BINANCE_TRADE_API_SECRET"),
-                                                recvWindow=60000  # 60 second window
+                                                api_secret=os.getenv("BINANCE_TRADE_API_SECRET")
                                             )
                                             last_check_time = current_time
                                         
                                         order_status = await state_manager.client.get_order(
                                             symbol=state_manager.symbol,
-                                            orderId=sell_order['orderId']
+                                            orderId=sell_order['orderId'],
+                                            recvWindow=60000  # Add recvWindow parameter
                                         )
                                         
                                         if order_status['status'] == 'FILLED':
@@ -410,7 +411,10 @@ async def run_single_cycle(dry_run=False):
                                 
                                 # Monitor SELL order status
                                 logger.info("Waiting for SELL order to fill...")
-                                sell_orders = await state_manager.client.get_open_orders(symbol=state_manager.symbol)
+                                sell_orders = await state_manager.client.get_open_orders(
+                                    symbol=state_manager.symbol,
+                                    recvWindow=60000  # Add recvWindow parameter
+                                )
                                 sell_order = next((order for order in sell_orders if order['side'] == 'SELL'), None)
                                 
                                 if sell_order:
@@ -424,14 +428,14 @@ async def run_single_cycle(dry_run=False):
                                             await state_manager.client.close_connection()
                                             state_manager.client = await AsyncClient.create(
                                                 api_key=os.getenv("BINANCE_TRADE_API_KEY"),
-                                                api_secret=os.getenv("BINANCE_TRADE_API_SECRET"),
-                                                recvWindow=60000  # 60 second window
+                                                api_secret=os.getenv("BINANCE_TRADE_API_SECRET")
                                             )
                                             last_check_time = current_time
                                         
                                         order_status = await state_manager.client.get_order(
                                             symbol=state_manager.symbol,
-                                            orderId=sell_order['orderId']
+                                            orderId=sell_order['orderId'],
+                                            recvWindow=60000  # Add recvWindow parameter
                                         )
                                         
                                         if order_status['status'] == 'FILLED':
