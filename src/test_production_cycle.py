@@ -24,6 +24,8 @@ from dotenv import load_dotenv
 import signal
 from contextlib import asynccontextmanager
 import aiohttp
+import time
+from binance.enums import *  # Import Binance enums
 
 from services.market_data import MarketDataService
 from services.sentiment_analyzer import SentimentAnalyzer
@@ -202,7 +204,14 @@ async def run_single_cycle(dry_run=False):
             if not api_key or not api_secret:
                 raise ValueError("Binance Trading API credentials not found")
             
-            client = await AsyncClient.create(api_key, api_secret)
+            # Initialize client without recvWindow
+            client = await AsyncClient.create(
+                api_key=api_key,
+                api_secret=api_secret
+            )
+            # Set recvWindow after creation if needed
+            client._request_options['recvWindow'] = 60000
+
             market_data = MarketDataService("TRUMPUSDC")
             correlation = CorrelationAnalyzer(client)
             state_manager = StateManager("TRUMPUSDC")
@@ -334,6 +343,56 @@ async def run_single_cycle(dry_run=False):
                                     price=sell_price,
                                     quantity=sell_quantity
                                 )
+                                
+                                # Monitor SELL order status
+                                logger.info("Waiting for SELL order to fill...")
+                                sell_orders = await state_manager.client.get_open_orders(symbol=state_manager.symbol)
+                                sell_order = next((order for order in sell_orders if order['side'] == 'SELL'), None)
+                                
+                                if sell_order:
+                                    last_check_time = time.time()
+                                    while True:
+                                        current_time = time.time()
+                                        
+                                        # Refresh client connection every 5 minutes
+                                        if current_time - last_check_time > 300:  # 5 minutes
+                                            logger.info("Refreshing API connection...")
+                                            await state_manager.client.close_connection()
+                                            state_manager.client = await AsyncClient.create(
+                                                api_key=os.getenv("BINANCE_TRADE_API_KEY"),
+                                                api_secret=os.getenv("BINANCE_TRADE_API_SECRET"),
+                                                recvWindow=60000  # 60 second window
+                                            )
+                                            last_check_time = current_time
+                                        
+                                        order_status = await state_manager.client.get_order(
+                                            symbol=state_manager.symbol,
+                                            orderId=sell_order['orderId']
+                                        )
+                                        
+                                        if order_status['status'] == 'FILLED':
+                                            # Update state manager with the fill
+                                            await state_manager.handle_order_update(order_status)
+                                            exit_price = Decimal(str(order_status['price']))
+                                            logger.info(f"SELL order filled at {exit_price}")
+                                            
+                                            # Log trade summary after both orders are filled
+                                            if state_manager.trades:
+                                                last_trade = state_manager.trades[-1]
+                                                logger.info("\nTrade Summary:")
+                                                logger.info(f"Entry Price: {last_trade.buy_order.price} USDC")
+                                                logger.info(f"Exit Price: {last_trade.sell_order.price} USDC")
+                                                logger.info(f"Quantity: {last_trade.buy_order.quantity} TRUMP")
+                                                logger.info(f"Profit/Loss: {last_trade.profit_loss} USDC")
+                                            break
+                                        elif order_status['status'] in ['CANCELED', 'REJECTED', 'EXPIRED']:
+                                            logger.error(f"SELL order {order_status['status']}")
+                                            return
+                                        
+                                        await asyncio.sleep(1)
+                                else:
+                                    logger.error("Could not find SELL order in open orders")
+                                    return
                             else:
                                 # If AI not confident, use conservative 0.5% margin
                                 sell_price = (entry_price * Decimal("1.005")).quantize(Decimal("0.01"))
@@ -348,6 +407,56 @@ async def run_single_cycle(dry_run=False):
                                     price=sell_price,
                                     quantity=sell_quantity
                                 )
+                                
+                                # Monitor SELL order status
+                                logger.info("Waiting for SELL order to fill...")
+                                sell_orders = await state_manager.client.get_open_orders(symbol=state_manager.symbol)
+                                sell_order = next((order for order in sell_orders if order['side'] == 'SELL'), None)
+                                
+                                if sell_order:
+                                    last_check_time = time.time()
+                                    while True:
+                                        current_time = time.time()
+                                        
+                                        # Refresh client connection every 5 minutes
+                                        if current_time - last_check_time > 300:  # 5 minutes
+                                            logger.info("Refreshing API connection...")
+                                            await state_manager.client.close_connection()
+                                            state_manager.client = await AsyncClient.create(
+                                                api_key=os.getenv("BINANCE_TRADE_API_KEY"),
+                                                api_secret=os.getenv("BINANCE_TRADE_API_SECRET"),
+                                                recvWindow=60000  # 60 second window
+                                            )
+                                            last_check_time = current_time
+                                        
+                                        order_status = await state_manager.client.get_order(
+                                            symbol=state_manager.symbol,
+                                            orderId=sell_order['orderId']
+                                        )
+                                        
+                                        if order_status['status'] == 'FILLED':
+                                            # Update state manager with the fill
+                                            await state_manager.handle_order_update(order_status)
+                                            exit_price = Decimal(str(order_status['price']))
+                                            logger.info(f"SELL order filled at {exit_price}")
+                                            
+                                            # Log trade summary after both orders are filled
+                                            if state_manager.trades:
+                                                last_trade = state_manager.trades[-1]
+                                                logger.info("\nTrade Summary:")
+                                                logger.info(f"Entry Price: {last_trade.buy_order.price} USDC")
+                                                logger.info(f"Exit Price: {last_trade.sell_order.price} USDC")
+                                                logger.info(f"Quantity: {last_trade.buy_order.quantity} TRUMP")
+                                                logger.info(f"Profit/Loss: {last_trade.profit_loss} USDC")
+                                            break
+                                        elif order_status['status'] in ['CANCELED', 'REJECTED', 'EXPIRED']:
+                                            logger.error(f"SELL order {order_status['status']}")
+                                            return
+                                        
+                                        await asyncio.sleep(1)
+                                else:
+                                    logger.error("Could not find SELL order in open orders")
+                                    return
                             break
                         elif order_status['status'] in ['CANCELED', 'REJECTED', 'EXPIRED']:
                             logger.error(f"Order {order_status['status']}")
@@ -359,20 +468,6 @@ async def run_single_cycle(dry_run=False):
                     logger.error(f"Error placing buy order: {e}")
                     return
             
-            # Wait for SELL order to fill
-            logger.info("Waiting for SELL order to fill...")
-            while state_manager.current_position is not None:
-                await asyncio.sleep(1)
-            
-            # Log trade summary
-            if state_manager.trades:
-                last_trade = state_manager.trades[-1]
-                logger.info("\nTrade Summary:")
-                logger.info(f"Entry Price: {last_trade.buy_order.price} USDC")
-                logger.info(f"Exit Price: {last_trade.sell_order.price} USDC")
-                logger.info(f"Quantity: {last_trade.buy_order.quantity} TRUMP")
-                logger.info(f"Profit/Loss: {last_trade.profit_loss} USDC")
-            
             logger.info("Test cycle completed successfully!")
     
     except Exception as e:
@@ -383,7 +478,10 @@ async def run_single_cycle(dry_run=False):
         if market_data:
             await market_data.stop()
         if client:
-            await client.close_connection()
+            try:
+                await client.close_connection()
+            except Exception as e:
+                logger.error(f"Error closing client connection: {e}")
 
 def handle_signal(signum, frame):
     """Handle shutdown signals"""

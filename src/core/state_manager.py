@@ -8,6 +8,8 @@ import json
 import aiohttp
 import logging
 from decimal import Decimal
+from binance import AsyncClient
+from binance.enums import *  # Import Binance enums
 
 # Configure logging
 logging.basicConfig(
@@ -65,7 +67,6 @@ class StateManager:
             
     async def start(self, api_key: str, api_secret: str):
         """Initialize Binance client"""
-        from binance import AsyncClient
         self.client = await AsyncClient.create(api_key=api_key, api_secret=api_secret)
         logger.info("State manager initialized with Binance client")
     
@@ -292,9 +293,9 @@ Return ONLY a JSON object in this exact format:
             # Place the order - convert Decimal to string for Binance API
             order = await self.client.create_order(
                 symbol=self.symbol,
-                side='BUY',
-                type='LIMIT',
-                timeInForce='GTC',
+                side=SIDE_BUY,
+                type=ORDER_TYPE_LIMIT,
+                timeInForce=TIME_IN_FORCE_GTC,
                 quantity=str(quantity),
                 price=str(price)
             )
@@ -342,9 +343,9 @@ Return ONLY a JSON object in this exact format:
             # Place the order - convert Decimal to string for Binance API
             order = await self.client.create_order(
                 symbol=self.symbol,
-                side='SELL',
-                type='LIMIT',
-                timeInForce='GTC',
+                side=SIDE_SELL,
+                type=ORDER_TYPE_LIMIT,
+                timeInForce=TIME_IN_FORCE_GTC,
                 quantity=str(formatted_quantity),
                 price=str(price)
             )
