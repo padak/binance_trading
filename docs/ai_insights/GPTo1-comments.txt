@@ -1,0 +1,134 @@
+Below is some context about the _request_options issue and how to fix it given that you’re on python-binance==1.0.19.
+
+Why This Error Happens
+In older versions of python-binance (synchronous client), there was a private attribute called self._request_options, sometimes used to override parameters like recvWindow.
+In newer versions and in the async client, _request_options may not exist, so doing:
+```
+client._request_options['recvWindow'] = 60000
+```
+will raise:
+```
+AttributeError: 'AsyncClient' object has no attribute '_request_options'
+```
+
+How to Fix
+
+1) Remove client._request_options usage
+Simply remove the line:
+```
+client._request_options['recvWindow'] = 60000
+```
+
+from your code. This is the simplest fix if you do not actually need a custom recvWindow.
+
+2) If you truly need a larger recvWindow, specify it in each API call
+If you have latency issues or a specific need for a larger recvWindow, you can pass recvWindow for each call that needs it. For example:
+```
+order = await client.create_order(
+    symbol="TRUMPUSDC",
+    side=SIDE_BUY,
+    type=ORDER_TYPE_LIMIT,
+    timeInForce=TIME_IN_FORCE_GTC,
+    quantity="10",
+    price="0.75",
+    recvWindow=60000  # <--- pass it here
+)
+```
+```
+order_status = await client.get_order(
+    symbol="TRUMPUSDC",
+    orderId=123456789,
+    recvWindow=60000  # <--- pass it here
+)
+```
+You would do the same for other calls like get_open_orders(), cancel_order(), etc., if you need the longer recvWindow for them.
+
+
+3) Check if passing options={"recvWindow": 60000} is supported in AsyncClient.create()
+
+Some versions of python-binance (especially the async client) allow you to do:
+```
+client = await AsyncClient.create(
+    api_key=api_key,
+    api_secret=api_secret,
+    options={"recvWindow": 60000}
+)
+```
+But if your specific version (python-binance==1.0.19) does not support that, you’ll see an error like:
+
+```
+TypeError: create() got an unexpected keyword argument 'options'
+```
+
+If that happens, your only option is to pass recvWindow in each API call as shown in step 2.
+
+Example Code Snippet
+
+Here’s a stripped-down version of your script that removes _request_options and passes recvWindow in the order placement call:
+
+```
+#!/usr/bin/env python3
+import asyncio
+import logging
+import os
+from decimal import Decimal
+from binance import AsyncClient
+from binance.enums import *
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+async def run_single_cycle():
+    client = None
+    try:
+        api_key = os.getenv("BINANCE_TRADE_API_KEY")
+        api_secret = os.getenv("BINANCE_TRADE_API_SECRET")
+
+        # 1. Create the AsyncClient WITHOUT referencing _request_options
+        client = await AsyncClient.create(
+            api_key=api_key,
+            api_secret=api_secret
+            # If your version supports it, you can try:
+            # options={"recvWindow": 60000}
+        )
+
+        # 2. Example of placing a limit BUY order with a custom recvWindow
+        price = Decimal("0.75")
+        quantity = Decimal("10")
+        order = await client.create_order(
+            symbol="TRUMPUSDC",
+            side=SIDE_BUY,
+            type=ORDER_TYPE_LIMIT,
+            timeInForce=TIME_IN_FORCE_GTC,
+            quantity=str(quantity),
+            price=str(price),
+            recvWindow=60000  # pass it here
+        )
+        logger.info(f"BUY order placed: {order}")
+
+        # 3. If you want to check the order status
+        order_status = await client.get_order(
+            symbol="TRUMPUSDC",
+            orderId=order["orderId"],
+            recvWindow=60000  # pass it here
+        )
+        logger.info(f"Order status: {order_status}")
+
+    except Exception as e:
+        logger.error(f"Error during trading cycle: {e}")
+        raise
+    finally:
+        if client:
+            try:
+                await client.close_connection()
+            except Exception as e:
+                logger.error(f"Error closing client connection: {e}")
+
+async def main():
+    await run_single_cycle()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+That’s it! This will avoid the AttributeError and still allow you to specify a custom recvWindow in each API call if you need it.
+

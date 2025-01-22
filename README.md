@@ -1,83 +1,99 @@
 # Binance Trading System
 
 ## Overview
-A sophisticated cryptocurrency trading system built for Binance, featuring real-time market data analysis, sentiment analysis, and correlation tracking. The system combines technical analysis with AI-driven decision making for optimal trading strategies.
+A sophisticated cryptocurrency trading system built for Binance, featuring real-time market data analysis and AI-driven trading decisions. The system focuses on the TRUMP/USDC trading pair with automated trade execution and risk management.
 
-## Core Services
+## Core Components
 
 ### [Trading Engine](docs/TRADING_ENGINE.md)
-Core decision-making component that:
-- Coordinates all services
-- Generates trading signals
-- Manages risk and position sizing
-- Executes trades automatically
+Core trading component that:
+- Places and monitors orders
+- Manages positions
+- Handles API interactions
+- Implements safety checks and error handling
 
-### [Market Data Service](docs/MARKET_DATA.md)
-Real-time market data and analysis including:
-- Price and volume tracking
-- Order book analysis
-- Technical indicators (MA, VWAP, RSI)
-- Market manipulation detection
+### [Market Data Service](docs/MARKET_DATA_SERVICE.md)
+Real-time market data collection and analysis:
+- WebSocket price streams
+- Order book monitoring
+- Volume tracking
+- Technical indicators
 
-### [Sentiment Analysis](docs/SENTIMENT_ANALYSIS.md)
-Multi-source sentiment analysis featuring:
-- Social media sentiment (Twitter)
-- News sentiment analysis
-- Fear & Greed Index tracking
-- AI-powered sentiment classification
+### [State Manager](docs/STATE_MANAGER.md)
+Trading state and position management:
+- Order state tracking
+- Position management
+- Trade recording
+- Balance monitoring
 
-### [Market Correlation Analysis](docs/CORRELATION_ANALYZER.md)
-Market relationship tracking including:
-- BTC price correlation
-- Market dominance metrics
-- Stablecoin flow analysis
-- Overall market trends
+### [Test Scripts](docs/TEST_SCRIPTS.md)
+Comprehensive test suite including:
+- Production cycle testing
+- WebSocket connectivity
+- Order management
+- Trading rules verification
+- Profit calculation
 
 ## Getting Started
 
 ### Prerequisites
 - Python 3.8+
 - Binance API keys
-- Twitter API keys
-- News API key
+- OpenRouter API key (for AI recommendations)
 
 ### Environment Setup
 1. Clone the repository
-2. Install dependencies:
+2. Create and activate virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
-3. Set up environment variables in `.env`:
+
+4. Set up environment variables in `.env`:
 ```
-BINANCE_API_KEY=your_binance_api_key
-BINANCE_API_SECRET=your_binance_api_secret
-TWITTER_BEARER_TOKEN=your_twitter_token
-NEWS_API_KEY=your_news_api_key
+BINANCE_TRADE_API_KEY=your_binance_api_key
+BINANCE_TRADE_API_SECRET=your_binance_api_secret
+OPENROUTER_API_KEY=your_openrouter_api_key
 ```
 
 ### Running Tests
-Verify service functionality:
+Start with basic functionality tests:
 ```bash
-python src/test_apis.py              # Test API integrations
+python src/test_apis.py              # Test API connections
 python src/test_market_data.py       # Test market data service
-python src/test_state_manager.py     # Test trading state management
-python src/test_trading_engine.py    # Test trading engine
+python src/test_websocket.py         # Test WebSocket connections
+python src/check_trading_rules.py    # Verify trading rules
+```
+
+Then proceed to trading tests:
+```bash
+python src/test_production_cycle.py --dry-run  # Test full trading cycle without real orders
 ```
 
 ## Architecture
-The system operates with several interconnected services coordinated by the Trading Engine:
+The system operates with several interconnected components:
 
-1. Trading Engine (Core)
-   - Signal generation and execution
-   - Risk management
-   - Position sizing
-   - Service coordination
+1. Core Services
+   - Trading Engine: Order execution and management
+   - Market Data Service: Real-time data collection
+   - State Manager: Trading state and position tracking
 
-2. Support Services
-   - Market Data Service: Real-time data collection and analysis
-   - Sentiment Analyzer: Multi-source sentiment analysis
-   - Correlation Analyzer: Market relationship tracking
-   - State Manager: Trading state and position management
+2. Testing & Utilities
+   - Production cycle testing
+   - WebSocket connectivity
+   - Order management
+   - Profit calculation
+
+## Documentation
+- [Trading Engine](docs/TRADING_ENGINE.md)
+- [Market Data Service](docs/MARKET_DATA_SERVICE.md)
+- [State Manager](docs/STATE_MANAGER.md)
+- [Test Scripts](docs/TEST_SCRIPTS.md)
 
 ## Contributing
 1. Fork the repository

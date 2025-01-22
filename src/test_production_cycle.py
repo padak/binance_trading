@@ -39,11 +39,35 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-async def cleanup(session=None):
-    """Cleanup resources"""
-    if session and not session.closed:
-        await session.close()
-    logger.info("Cleanup completed")
+async def cleanup(self):
+    """Cleanup resources properly"""
+    try:
+        logging.info("Starting cleanup...")
+        
+        # Stop market data service
+        if hasattr(self, 'market_data'):
+            await self.market_data.stop()
+            logging.info("Market data service stopped")
+            
+        # Close Binance client connection
+        if hasattr(self, 'client'):
+            await self.client.close_connection()
+            logging.info("Binance client connection closed")
+            
+        # Close any remaining aiohttp sessions
+        for task in asyncio.all_tasks():
+            if 'aiohttp' in str(task):
+                try:
+                    task.cancel()
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                    
+        logging.info("Cleanup completed successfully")
+    except Exception as e:
+        logging.error(f"Error during cleanup: {str(e)}")
+    finally:
+        logging.info("Shutdown complete")
 
 @asynccontextmanager
 async def managed_resources():
