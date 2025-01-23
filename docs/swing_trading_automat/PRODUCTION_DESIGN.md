@@ -4,6 +4,54 @@
 
 A Python-based automation system for swing trading on Binance, focusing on managing SELL orders for existing BUY positions. The system monitors filled BUY orders and places corresponding SELL orders when profit conditions are met. Once a SELL order is placed, it remains active until either filled or manually cancelled - the system maintains a strict hands-off approach to active SELL orders.
 
+### System Workflow
+
+```mermaid
+graph TD
+    %% WebSocket Connections
+    WS1[User Data WebSocket] -->|Order Updates| OrderMon[Order Monitor]
+    WS2[Market Data WebSocket] -->|Price Updates| PriceMon[Price Monitor]
+    
+    %% Main Flow
+    OrderMon -->|Detect BUY Fill| Process[Process Fill]
+    Process -->|Create Trade Record| DB[(Database)]
+    Process -->|Calculate Target| Calc[Calculate Profit Price]
+    
+    PriceMon -->|Current Price| Calc
+    Calc -->|Price >= Target| SellOrder[Place SELL Order]
+    
+    %% Order Management
+    SellOrder -->|Create Order| Binance[Binance Exchange]
+    SellOrder -->|Record Order| DB
+    
+    %% Position Monitoring
+    Monitor[Position Monitor] -->|Check Age| DB
+    Monitor -->|Age > 10h| Alert[Generate Alert]
+    
+    %% Manual Management
+    CLI[Position Management CLI] -->|Query| DB
+    CLI -->|Force Close| Binance
+    
+    %% Partial Fills
+    Process -->|If Partial Fill| Split[Create Independent Trade]
+    Split --> Process
+    
+    %% State Recovery
+    Recovery[System Recovery] -->|Load State| DB
+    Recovery -->|Verify Orders| Binance
+    
+    %% Styling
+    classDef wsClass fill:#f9f,stroke:#333,stroke-width:2px
+    classDef processClass fill:#bbf,stroke:#333,stroke-width:2px
+    classDef dbClass fill:#ddd,stroke:#333,stroke-width:2px
+    classDef exchangeClass fill:#bfb,stroke:#333,stroke-width:2px
+    
+    class WS1,WS2 wsClass
+    class Process,Calc,Monitor,Split processClass
+    class DB dbClass
+    class Binance exchangeClass
+```
+
 ### Key Features
 - Monitor and manage BUY orders with exact 1:1 quantity matching for SELL orders
 - Handle partial BUY fills as independent trades, each with its own SELL order
